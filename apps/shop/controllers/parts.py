@@ -1,9 +1,14 @@
 """
 Parts inventory API endpoints.
 """
+
 from py4web import action, request, HTTP
 from ..common import db, auth, session
-from ..contexts.inventory import StockAdjustmentContext, ReceiveStockContext, LowStockReportContext
+from ..contexts.inventory import (
+    StockAdjustmentContext,
+    ReceiveStockContext,
+    LowStockReportContext,
+)
 
 
 @action("api/parts", method=["GET"])
@@ -11,17 +16,25 @@ from ..contexts.inventory import StockAdjustmentContext, ReceiveStockContext, Lo
 def parts_list():
     low_stock_only = request.query.get("low_stock") == "1"
     q = request.query.get("q", "").strip()
+    limit = request.query.get("limit")
+    offset = request.query.get("offset")
 
     if low_stock_only:
         ctx = LowStockReportContext(db)
         return dict(parts=ctx.execute())
 
+    limitby = None
+    if limit:
+        try:
+            off = int(offset or 0)
+            limitby = (off, off + int(limit))
+        except (TypeError, ValueError):
+            limitby = None
+
     query = db.part.active == True
     if q:
-        query &= (
-            db.part.part_number.contains(q) | db.part.description.contains(q)
-        )
-    rows = db(query).select(orderby=db.part.description)
+        query &= db.part.part_number.contains(q) | db.part.description.contains(q)
+    rows = db(query).select(orderby=db.part.description, limitby=limitby)
     return dict(parts=[r.as_dict() for r in rows])
 
 
@@ -29,13 +42,23 @@ def parts_list():
 @action.uses(db, session, auth)
 def parts_create():
     data = request.json or {}
-    result = db.part.validate_and_insert(**{
-        k: data.get(k) for k in [
-            "part_number", "description", "manufacturer_id", "supplier_id",
-            "compatible_categories", "qty_on_hand", "reorder_point", "reorder_qty",
-            "cost", "price",
-        ]
-    })
+    result = db.part.validate_and_insert(
+        **{
+            k: data.get(k)
+            for k in [
+                "part_number",
+                "description",
+                "manufacturer_id",
+                "supplier_id",
+                "compatible_categories",
+                "qty_on_hand",
+                "reorder_point",
+                "reorder_qty",
+                "cost",
+                "price",
+            ]
+        }
+    )
     if result.get("errors"):
         raise HTTP(422, str(result["errors"]))
     return dict(id=result["id"])
@@ -54,7 +77,7 @@ def parts_get(part_id):
     if row.supplier_id:
         sup = db.supplier[row.supplier_id]
         part["supplier_name"] = sup.name if sup else ""
-    
+
     adj_list = []
     for a in adjustments:
         item = a.as_dict()
@@ -78,9 +101,9 @@ def parts_update(part_id):
     if not db.part[part_id]:
         raise HTTP(404)
     data = request.json or {}
-    db(db.part.id == part_id).update(**{
-        k: data[k] for k in data if k in db.part.fields and k != "id"
-    })
+    db(db.part.id == part_id).update(
+        **{k: data[k] for k in data if k in db.part.fields and k != "id"}
+    )
     return dict(ok=True)
 
 

@@ -1,4 +1,5 @@
 """Work orders — role-based queue list and intake form."""
+
 import app
 import api
 from gantrika import form_data
@@ -6,8 +7,12 @@ from browser import document, window
 from constants import EQUIPMENT_CATEGORY_LABELS, WO_STATUS_LABELS as STATUS_LABELS
 
 _STATUS_PRIORITY = {
-    "in_repair": 1, "awaiting_approval": 2, "diagnosed": 3,
-    "awaiting_parts": 4, "intake": 5, "ready": 6,
+    "in_repair": 1,
+    "awaiting_approval": 2,
+    "diagnosed": 3,
+    "awaiting_parts": 4,
+    "intake": 5,
+    "ready": 6,
 }
 _ACTIVE_STATUSES = "intake,diagnosed,awaiting_approval,in_repair,awaiting_parts,ready"
 
@@ -15,6 +20,7 @@ _ACTIVE_STATUSES = "intake,diagnosed,awaiting_approval,in_repair,awaiting_parts,
 # ── List ──────────────────────────────────────────────────────────────────────
 
 _active_filter = "active"  # mutable global state
+
 
 def render_list(filter_name=None):
     global _active_filter
@@ -28,24 +34,37 @@ def render_list(filter_name=None):
         status_param = "closed,cancelled"
 
     try:
-        data = api.list_work_orders(status=status_param)
+        # Cap the completed view so the full work-order history isn't loaded on every render.
+        # desc=1 makes the server return the most recent 200 (newest first).
+        completed = _active_filter == "completed"
+        data = api.list_work_orders(
+            status=status_param,
+            limit=200 if completed else None,
+            desc="1" if completed else None,
+        )
     except api.ApiError as err:
         app.toast(f"Error: {err.message}", "error")
         return
 
     work_orders = data.get("work_orders", [])
-    
+
     if _active_filter == "active":
-        work_orders.sort(key=lambda wo: (
-            _STATUS_PRIORITY.get(wo.get("status", ""), 99),
-            wo.get("date_promised") or "9999-99-99",
-        ))
+        work_orders.sort(
+            key=lambda wo: (
+                _STATUS_PRIORITY.get(wo.get("status", ""), 99),
+                wo.get("date_promised") or "9999-99-99",
+            )
+        )
     elif _active_filter == "completed":
-        work_orders.sort(key=lambda wo: wo.get("date_out") or wo.get("date_in") or "0000-00-00", reverse=True)
+        work_orders.sort(
+            key=lambda wo: wo.get("date_out") or wo.get("date_in") or "0000-00-00",
+            reverse=True,
+        )
     else:
         work_orders.sort(key=lambda wo: wo.get("id", 0), reverse=True)
 
     from datetime import date
+
     today = str(date.today())
 
     rows = []
@@ -55,24 +74,31 @@ def render_list(filter_name=None):
         equip = wo.get("equipment") or {}
         emp = wo.get("employee") or {}
         promised = wo.get("date_promised") or ""
-        is_overdue = bool(promised and promised < today and status not in ("closed", "cancelled"))
-        rows.append({
-            "id": wo["id"],
-            "customer_name": f"{cust.get('last_name','')}, {cust.get('first_name','')}".strip(", "),
-            "equip_desc": f"{equip.get('make','')} {equip.get('model','')}".strip() or "—",
-            "work_type": wo.get("work_type", "").title(),
-            "status": status,
-            "status_label": STATUS_LABELS.get(status, status),
-            "date_promised": promised,
-            "date_out": str(wo.get("date_out") or "")[:10],
-            "tech_name": f"{emp.get('first_name','')} {emp.get('last_name','')}".strip() or "—",
-            "is_overdue": is_overdue,
-        })
+        is_overdue = bool(
+            promised and promised < today and status not in ("closed", "cancelled")
+        )
+        rows.append(
+            {
+                "id": wo["id"],
+                "customer_name": f"{cust.get('last_name', '')}, {cust.get('first_name', '')}".strip(
+                    ", "
+                ),
+                "equip_desc": f"{equip.get('make', '')} {equip.get('model', '')}".strip()
+                or "—",
+                "work_type": wo.get("work_type", "").title(),
+                "status": status,
+                "status_label": STATUS_LABELS.get(status, status),
+                "date_promised": promised,
+                "date_out": str(wo.get("date_out") or "")[:10],
+                "tech_name": f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip()
+                or "—",
+                "is_overdue": is_overdue,
+            }
+        )
 
-    app.render("tpl-workorders-list", {
-        "work_orders": rows,
-        "active_filter": _active_filter
-    })
+    app.render(
+        "tpl-workorders-list", {"work_orders": rows, "active_filter": _active_filter}
+    )
     _bind_list_events()
 
 
@@ -92,6 +118,7 @@ def _bind_list_events():
 
 # ── Intake form ───────────────────────────────────────────────────────────────
 
+
 def render_intake(prefill_customer_id=None, prefill_equipment_id=None):
     try:
         emp_data = api.list_employees()
@@ -106,16 +133,21 @@ def render_intake(prefill_customer_id=None, prefill_equipment_id=None):
 
     try:
         settings_data = api.get("/shop/api/settings")
-        default_threshold = float(settings_data.get("settings", {}).get("estimate_approval_threshold", 100.0))
+        default_threshold = float(
+            settings_data.get("settings", {}).get("estimate_approval_threshold", 100.0)
+        )
         default_approval_threshold = f"{default_threshold:.2f}"
     except Exception:
         default_approval_threshold = "100.00"
 
-    app.render("tpl-workorders-intake", {
-        "employees": emp_rows,
-        "default_promise": default_promise,
-        "default_approval_threshold": default_approval_threshold,
-    })
+    app.render(
+        "tpl-workorders-intake",
+        {
+            "employees": emp_rows,
+            "default_promise": default_promise,
+            "default_approval_threshold": default_approval_threshold,
+        },
+    )
 
     _bind_intake(prefill_customer_id, prefill_equipment_id)
 
@@ -136,6 +168,7 @@ def _bind_intake(prefill_customer_id, prefill_equipment_id):
 
     search_el = document.getElementById("customer-search-input")
     if search_el:
+
         def _on_search(evt):
             query = evt.target.value.strip()
             results_div = document.getElementById("customer-search-results")
@@ -149,6 +182,7 @@ def _bind_intake(prefill_customer_id, prefill_equipment_id):
                 _render_customer_results(customers, set_customer)
             except api.ApiError:
                 pass
+
         search_el.bind("input", _on_search)
 
         def _on_blur(evt):
@@ -156,6 +190,7 @@ def _bind_intake(prefill_customer_id, prefill_equipment_id):
             if results_div:
                 # Small delay so a click on a result still fires before hiding
                 window.setTimeout(lambda: results_div.classList.add("hidden"), 150)
+
         search_el.bind("blur", _on_blur)
 
     btn_new = document.getElementById("btn-new-customer-inline")
@@ -164,6 +199,7 @@ def _bind_intake(prefill_customer_id, prefill_equipment_id):
 
     wt_select = document.getElementById("intake-work-type")
     if wt_select:
+
         def _on_type_change(evt):
             try:
                 pd = api.get_promise_date(evt.target.value).get("date", "")
@@ -172,6 +208,7 @@ def _bind_intake(prefill_customer_id, prefill_equipment_id):
                     el.value = pd
             except api.ApiError:
                 pass
+
         wt_select.bind("change", _on_type_change)
 
     btn_submit = document.getElementById("btn-submit-intake")
@@ -204,16 +241,21 @@ def _render_customer_results(customers, on_select):
     rows = []
     for cust in customers[:8]:
         contact = cust.get("phone") or cust.get("email") or ""
-        rows.append({
-            "id": cust["id"],
-            "first_name": cust.get("first_name", ""),
-            "last_name": cust.get("last_name", ""),
-            "contact": contact,
-        })
-    results_div.html = app.render_partial("tpl-intake-customer-results", {"customers": rows})
+        rows.append(
+            {
+                "id": cust["id"],
+                "first_name": cust.get("first_name", ""),
+                "last_name": cust.get("last_name", ""),
+                "contact": contact,
+            }
+        )
+    results_div.html = app.render_partial(
+        "tpl-intake-customer-results", {"customers": rows}
+    )
     results_div.classList.remove("hidden")
     for item in results_div.select(".search-result-item[data-id]"):
         cid = int(item.getAttribute("data-id"))
+
         def _make_handler(cid=cid):
             def _click(evt):
                 results_div.classList.add("hidden")
@@ -223,7 +265,9 @@ def _render_customer_results(customers, on_select):
                     on_select(cid)
                 except api.ApiError as err:
                     app.toast(f"Error: {err.message}", "error")
+
             return _click
+
         item.bind("click", _make_handler())
 
 
@@ -237,14 +281,18 @@ def _show_selected_customer(cust, customer_id, on_select):
         btn_new.classList.add("hidden")
     if card:
         contact = cust.get("phone") or cust.get("email") or "—"
-        card.html = app.render_partial("tpl-intake-selected-customer", {
-            "first_name": cust.get("first_name", ""),
-            "last_name": cust.get("last_name", ""),
-            "contact": contact,
-        })
+        card.html = app.render_partial(
+            "tpl-intake-selected-customer",
+            {
+                "first_name": cust.get("first_name", ""),
+                "last_name": cust.get("last_name", ""),
+                "contact": contact,
+            },
+        )
         card.classList.remove("hidden")
         change_btn = document.getElementById("btn-change-cust")
         if change_btn:
+
             def _change(evt):
                 card.classList.add("hidden")
                 if search_el:
@@ -256,19 +304,32 @@ def _show_selected_customer(cust, customer_id, on_select):
                 if picker:
                     picker.html = app.render_partial("tpl-intake-picker-empty", {})
                 on_select(None)
+
             change_btn.bind("click", _change)
 
 
 def _inline_customer_form(on_created):
-    body = app.render_partial("tpl-customer-form", {
-        "first_name": "", "last_name": "", "phone": "", "email": "",
-        "contact_preference": "call", "customer_type": "residential",
-        "address": "", "city": "", "state": "TX", "zip_code": "", "notes": "",
-    })
+    body = app.render_partial(
+        "tpl-customer-form",
+        {
+            "first_name": "",
+            "last_name": "",
+            "phone": "",
+            "email": "",
+            "contact_preference": "call",
+            "customer_type": "residential",
+            "address": "",
+            "city": "",
+            "state": "TX",
+            "zip_code": "",
+            "notes": "",
+        },
+    )
     app.modal("New Customer", body)
 
     form = document.getElementById("form-customer")
     if form:
+
         def _submit(evt):
             evt.preventDefault()
             data = form_data("#form-customer")
@@ -281,6 +342,7 @@ def _inline_customer_form(on_created):
                 app.toast("Customer created", "success")
             except api.ApiError as err:
                 app.toast(f"Error: {err.message}", "error")
+
         form.bind("submit", _submit)
 
     cancel = document.getElementById("btn-cancel-customer")
@@ -296,7 +358,9 @@ def _load_equipment_picker(customer_id, on_select, prefill_equipment_id=None):
         data = api.get_customer(customer_id)
         equipment_list = data.get("equipment", [])
     except api.ApiError as err:
-        picker.html = app.render_partial("tpl-intake-picker-error", {"message": err.message})
+        picker.html = app.render_partial(
+            "tpl-intake-picker-error", {"message": err.message}
+        )
         return
 
     if not prefill_equipment_id and len(equipment_list) == 1:
@@ -306,28 +370,36 @@ def _load_equipment_picker(customer_id, on_select, prefill_equipment_id=None):
     for eq in equipment_list:
         cat = EQUIPMENT_CATEGORY_LABELS.get(eq.get("category", ""), "")
         year = eq.get("year") or ""
-        desc = f"{year} {eq.get('make','')} {eq.get('model','')}".strip()
+        desc = f"{year} {eq.get('make', '')} {eq.get('model', '')}".strip()
         sn = f" S/N:{eq['serial_number']}" if eq.get("serial_number") else ""
-        equip_rows.append({
-            "id": eq["id"],
-            "label": f"{desc} ({cat}){sn}",
-            "is_selected": eq["id"] == prefill_equipment_id,
-        })
+        equip_rows.append(
+            {
+                "id": eq["id"],
+                "label": f"{desc} ({cat}){sn}",
+                "is_selected": eq["id"] == prefill_equipment_id,
+            }
+        )
 
-    picker.html = app.render_partial("tpl-intake-equipment-picker", {"equipment": equip_rows})
+    picker.html = app.render_partial(
+        "tpl-intake-equipment-picker", {"equipment": equip_rows}
+    )
 
     equip_select = document.getElementById("equipment-select")
     if equip_select:
         if prefill_equipment_id:
             on_select(prefill_equipment_id)
+
         def _on_change(evt):
             val = evt.target.value
             on_select(int(val) if val else None)
+
         equip_select.bind("change", _on_change)
 
     btn_add = document.getElementById("btn-add-equip-inline")
     if btn_add:
-        btn_add.bind("click", lambda evt: _inline_equipment_form(customer_id, on_select))
+        btn_add.bind(
+            "click", lambda evt: _inline_equipment_form(customer_id, on_select)
+        )
 
 
 def _inline_equipment_form(customer_id, on_select):
@@ -335,19 +407,26 @@ def _inline_equipment_form(customer_id, on_select):
     if not form_div:
         return
     from constants import EQUIPMENT_CATEGORIES
+
     cat_rows = [{"value": val, "label": label} for val, label in EQUIPMENT_CATEGORIES]
-    form_div.html = app.render_partial("tpl-intake-equipment-form", {"categories": cat_rows})
+    form_div.html = app.render_partial(
+        "tpl-intake-equipment-form", {"categories": cat_rows}
+    )
     form = document.getElementById("form-equip-inline")
     if form:
+
         def _submit(evt):
             evt.preventDefault()
             data = form_data("#form-equip-inline")
             try:
                 new_id = api.create_equipment(customer_id, data)["id"]
                 app.toast("Equipment added", "success")
-                _load_equipment_picker(customer_id, on_select, prefill_equipment_id=new_id)
+                _load_equipment_picker(
+                    customer_id, on_select, prefill_equipment_id=new_id
+                )
             except api.ApiError as err:
                 app.toast(f"Error: {err.message}", "error")
+
         form.bind("submit", _submit)
     cancel = document.getElementById("btn-cancel-equip-inline")
     if cancel:

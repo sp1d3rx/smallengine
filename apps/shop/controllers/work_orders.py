@@ -1,6 +1,7 @@
 """
 Work order API endpoints.
 """
+
 import datetime
 from decimal import Decimal
 from py4web import action, request, HTTP
@@ -22,34 +23,73 @@ from ..contexts.repair import (
 
 # ── List + create ─────────────────────────────────────────────────────────────
 
+
 @action("api/workorders", method=["GET"])
 @action.uses(db, session, auth)
 def work_orders_list():
     require_user()
     status = request.query.get("status")
     employee_id = request.query.get("employee_id")
+    view = request.query.get("view")
+    limit = request.query.get("limit")
+    offset = request.query.get("offset")
+    desc = request.query.get("desc") == "1"
 
-    query = db.work_order.id > 0
-    if status:
-        if "," in status:
-            query &= db.work_order.status.belongs(status.split(","))
-        else:
-            query &= db.work_order.status == status
-    if employee_id:
-        query &= db.work_order.employee_id == int(employee_id)
+    limitby = None
+    if limit:
+        try:
+            off = int(offset or 0)
+            limitby = (off, off + int(limit))
+        except (TypeError, ValueError):
+            limitby = None
+
+    if view == "dashboard":
+        # Dashboard only needs open WOs plus closed-but-not-yet-picked-up units.
+        # Bounding here keeps the landing page from loading the full work-order history.
+        open_statuses = [
+            "intake",
+            "diagnosed",
+            "awaiting_approval",
+            "awaiting_parts",
+            "in_repair",
+            "ready",
+        ]
+        query = (db.work_order.status.belongs(open_statuses)) | (
+            (db.work_order.status == "closed") & (db.work_order.date_out == None)
+        )
+    else:
+        query = db.work_order.id > 0
+        if status:
+            if "," in status:
+                query &= db.work_order.status.belongs(status.split(","))
+            else:
+                query &= db.work_order.status == status
+        if employee_id:
+            query &= db.work_order.employee_id == int(employee_id)
 
     rows = db(query).select(
         db.work_order.ALL,
-        db.customer.first_name, db.customer.last_name,
-        db.customer.phone, db.customer.email, db.customer.contact_preference,
-        db.equipment.make, db.equipment.model, db.equipment.category,
-        db.employee.first_name, db.employee.last_name,
+        db.customer.first_name,
+        db.customer.last_name,
+        db.customer.phone,
+        db.customer.email,
+        db.customer.contact_preference,
+        db.equipment.make,
+        db.equipment.model,
+        db.equipment.category,
+        db.employee.first_name,
+        db.employee.last_name,
         left=[
             db.customer.on(db.work_order.customer_id == db.customer.id),
             db.equipment.on(db.work_order.equipment_id == db.equipment.id),
             db.employee.on(db.work_order.employee_id == db.employee.id),
         ],
-        orderby=db.work_order.date_promised | db.work_order.date_in,
+        orderby=(
+            ~db.work_order.date_promised | ~db.work_order.date_in
+            if desc
+            else db.work_order.date_promised | db.work_order.date_in
+        ),
+        limitby=limitby,
     )
     result = []
     for row in rows:
@@ -66,10 +106,14 @@ def work_orders_list():
             "model": row.equipment.model,
             "category": row.equipment.category,
         }
-        item["employee"] = {
-            "first_name": row.employee.first_name,
-            "last_name": row.employee.last_name,
-        } if row.employee.first_name else None
+        item["employee"] = (
+            {
+                "first_name": row.employee.first_name,
+                "last_name": row.employee.last_name,
+            }
+            if row.employee.first_name
+            else None
+        )
         result.append(item)
     return dict(work_orders=result)
 
@@ -89,6 +133,7 @@ def work_orders_create():
     date_promised = None
     if data.get("date_promised"):
         from datetime import date
+
         date_promised = date.fromisoformat(data["date_promised"])
 
     ctx = RepairIntakeContext(db, customer, equipment)
@@ -107,15 +152,18 @@ def work_orders_create():
 
 # ── Promise date suggestion ───────────────────────────────────────────────────
 
+
 @action("api/promise-date", method=["GET"])
 @action.uses(db, session, auth)
 def promise_date():
     require_user()
     work_type = request.query.get("work_type", "repair")
     from ..contexts.repair import RepairIntakeContext
+
     # Use a throwaway context just for the calculation (no rows needed)
     from ..roles.base import RoleObject
     import types
+
     ctx = object.__new__(RepairIntakeContext)
     ctx.db = db
     suggested = ctx.calculate_promise_date(work_type)
@@ -123,6 +171,7 @@ def promise_date():
 
 
 # ── Single work order ─────────────────────────────────────────────────────────
+
 
 @action("api/workorders/<wo_id:int>", method=["GET"])
 @action.uses(db, session, auth)
@@ -144,18 +193,22 @@ def work_orders_get(wo_id):
     )
     comms = db(db.work_order_communication.work_order_id == wo_id).select(
         db.work_order_communication.ALL,
-        db.employee.first_name, db.employee.last_name,
+        db.employee.first_name,
+        db.employee.last_name,
         left=db.employee.on(db.work_order_communication.employee_id == db.employee.id),
         orderby=~db.work_order_communication.logged_at,
     )
 
     # Equipment history (other WOs for this equipment, most recent first)
     history = db(
-        (db.work_order.equipment_id == wo.equipment_id)
-        & (db.work_order.id != wo_id)
+        (db.work_order.equipment_id == wo.equipment_id) & (db.work_order.id != wo_id)
     ).select(
-        db.work_order.id, db.work_order.work_type, db.work_order.status,
-        db.work_order.reported_problem, db.work_order.date_in, db.work_order.date_out,
+        db.work_order.id,
+        db.work_order.work_type,
+        db.work_order.status,
+        db.work_order.reported_problem,
+        db.work_order.date_in,
+        db.work_order.date_out,
         orderby=~db.work_order.date_in,
         limitby=(0, 10),
     )
@@ -174,7 +227,8 @@ def work_orders_get(wo_id):
         item = comm.work_order_communication.as_dict()
         item["employee_name"] = (
             f"{comm.employee.first_name} {comm.employee.last_name}"
-            if comm.employee.first_name else "—"
+            if comm.employee.first_name
+            else "—"
         )
         comm_list.append(item)
 
@@ -182,11 +236,20 @@ def work_orders_get(wo_id):
     payments = []
     if invoice:
         payments = db(db.payment.invoice_id == invoice.id).select(
-            orderby=db.payment.received_on)
+            orderby=db.payment.received_on
+        )
 
     shop = db(db.shop_settings).select().first()
-    default_threshold = float(shop.estimate_approval_threshold) if shop and shop.estimate_approval_threshold else 100.0
-    approval_threshold = float(wo.pre_approved_limit) if wo.pre_approved_limit is not None else default_threshold
+    default_threshold = (
+        float(shop.estimate_approval_threshold)
+        if shop and shop.estimate_approval_threshold
+        else 100.0
+    )
+    approval_threshold = (
+        float(wo.pre_approved_limit)
+        if wo.pre_approved_limit is not None
+        else default_threshold
+    )
 
     return dict(
         work_order=wo.as_dict(),
@@ -224,6 +287,7 @@ def _safe_int(val, default=None):
 
 # ── Status actions ────────────────────────────────────────────────────────────
 
+
 @action("api/workorders/<wo_id:int>/status", method=["POST"])
 @action.uses(db, session, auth)
 def work_orders_advance_status(wo_id):
@@ -237,6 +301,7 @@ def work_orders_advance_status(wo_id):
     if action_name == "advance":
         from ..roles.base import cast
         from ..roles.work_order_roles import ProgressableRole
+
         wo_role = cast(wo, ProgressableRole, table_name="work_order")
         new_status = wo_role.advance(db)
         result = {"status": new_status}
@@ -270,7 +335,10 @@ def work_orders_advance_status(wo_id):
         result = ctx.execute()
     elif action_name == "notify_ready":
         from datetime import date
-        pickup_date = date.fromisoformat(data["pickup_date"]) if data.get("pickup_date") else None
+
+        pickup_date = (
+            date.fromisoformat(data["pickup_date"]) if data.get("pickup_date") else None
+        )
         ctx = NotifyReadyContext(db, wo)
         result = ctx.execute(pickup_date=pickup_date)
     elif action_name == "generate_invoice":
@@ -289,20 +357,26 @@ def work_orders_advance_status(wo_id):
             reference=data.get("reference", ""),
             received_on=datetime.date.today(),
         )
-        paid_row = db(db.payment.invoice_id == invoice.id).select(
-            db.payment.amount.sum()).first()
+        paid_row = (
+            db(db.payment.invoice_id == invoice.id)
+            .select(db.payment.amount.sum())
+            .first()
+        )
         total_paid = float(paid_row[db.payment.amount.sum()] or 0)
         new_inv_status = "paid" if total_paid >= float(invoice.total) else "partial"
         db(db.invoice.id == invoice.id).update(status=new_inv_status)
         result = {"ok": True, "invoice_status": new_inv_status}
     elif action_name == "mark_pickup":
         from datetime import date
+
         pickup_str = data.get("pickup_date")
         pickup_date = date.fromisoformat(pickup_str) if pickup_str else date.today()
         db.work_order[wo_id] = dict(date_out=pickup_date)
         result = {"ok": True, "date_out": str(pickup_date)}
     elif action_name == "transfer_to_inventory":
-        db.equipment[wo.equipment_id] = dict(condition="renewed_inventory", customer_id=None)
+        db.equipment[wo.equipment_id] = dict(
+            condition="renewed_inventory", customer_id=None
+        )
         result = {"ok": True}
     else:
         raise HTTP(400, f'{{"error":"Unknown action: {action_name}"}}')
@@ -312,6 +386,7 @@ def work_orders_advance_status(wo_id):
 
 
 # ── Labor lines ───────────────────────────────────────────────────────────────
+
 
 @action("api/workorders/<wo_id:int>/labor", method=["POST"])
 @action.uses(db, session, auth)
@@ -342,18 +417,36 @@ def work_orders_add_labor(wo_id):
 def work_orders_update_labor(wo_id, line_id):
     require_user()
     data = request.json or {}
-    row = db((db.work_order_labor.id == line_id)
-             & (db.work_order_labor.work_order_id == wo_id)).select().first()
+    row = (
+        db(
+            (db.work_order_labor.id == line_id)
+            & (db.work_order_labor.work_order_id == wo_id)
+        )
+        .select()
+        .first()
+    )
     if not row:
         raise HTTP(404)
     if "hours" in data or "rate" in data:
         hours = _safe_decimal(data.get("hours"), str(row.hours))
         rate = _safe_decimal(data.get("rate"), str(row.rate))
         data["total"] = float(hours * rate)
-    db((db.work_order_labor.id == line_id)
-       & (db.work_order_labor.work_order_id == wo_id)).update(
-        **{k: data[k] for k in ["description", "hours", "rate", "total", "is_warranty",
-                                  "employee_id"] if k in data}
+    db(
+        (db.work_order_labor.id == line_id)
+        & (db.work_order_labor.work_order_id == wo_id)
+    ).update(
+        **{
+            k: data[k]
+            for k in [
+                "description",
+                "hours",
+                "rate",
+                "total",
+                "is_warranty",
+                "employee_id",
+            ]
+            if k in data
+        }
     )
     db.commit()
     return dict(ok=True)
@@ -366,13 +459,16 @@ def work_orders_delete_labor(wo_id, line_id):
     wo = db.work_order[wo_id]
     if wo and wo.status in ("closed", "cancelled"):
         raise HTTP(422, '{"error":"Cannot modify a closed or cancelled work order"}')
-    db((db.work_order_labor.id == line_id)
-       & (db.work_order_labor.work_order_id == wo_id)).delete()
+    db(
+        (db.work_order_labor.id == line_id)
+        & (db.work_order_labor.work_order_id == wo_id)
+    ).delete()
     db.commit()
     return dict(ok=True)
 
 
 # ── Parts lines ───────────────────────────────────────────────────────────────
+
 
 @action("api/workorders/<wo_id:int>/parts", method=["POST"])
 @action.uses(db, session, auth)
@@ -405,23 +501,32 @@ def work_orders_delete_part(wo_id, line_id):
     require_user()
     from ..roles.base import cast
     from ..roles.parts_roles import StockableRole
+
     wo = db.work_order[wo_id]
     if wo and wo.status in ("closed", "cancelled"):
         raise HTTP(422, '{"error":"Cannot modify a closed or cancelled work order"}')
-    line = db((db.work_order_part.id == line_id)
-              & (db.work_order_part.work_order_id == wo_id)).select().first()
+    line = (
+        db(
+            (db.work_order_part.id == line_id)
+            & (db.work_order_part.work_order_id == wo_id)
+        )
+        .select()
+        .first()
+    )
     if line and line.part_id:
         part_row = db.part[line.part_id]
         if part_row:
             stockable = cast(part_row, StockableRole, table_name="part")
             stockable.adjust_stock(db, line.quantity, "work_order_removal", wo_id)
-    db((db.work_order_part.id == line_id)
-       & (db.work_order_part.work_order_id == wo_id)).delete()
+    db(
+        (db.work_order_part.id == line_id) & (db.work_order_part.work_order_id == wo_id)
+    ).delete()
     db.commit()
     return dict(ok=True)
 
 
 # ── Communication log ─────────────────────────────────────────────────────────
+
 
 @action("api/workorders/<wo_id:int>/communications", method=["GET"])
 @action.uses(db, session, auth)
@@ -431,7 +536,8 @@ def communications_list(wo_id):
         raise HTTP(404)
     rows = db(db.work_order_communication.work_order_id == wo_id).select(
         db.work_order_communication.ALL,
-        db.employee.first_name, db.employee.last_name,
+        db.employee.first_name,
+        db.employee.last_name,
         left=db.employee.on(db.work_order_communication.employee_id == db.employee.id),
         orderby=~db.work_order_communication.logged_at,
     )
@@ -440,7 +546,8 @@ def communications_list(wo_id):
         item = row.work_order_communication.as_dict()
         item["employee_name"] = (
             f"{row.employee.first_name} {row.employee.last_name}"
-            if row.employee.first_name else "—"
+            if row.employee.first_name
+            else "—"
         )
         result.append(item)
     return dict(communications=result)
@@ -469,6 +576,7 @@ def communications_create(wo_id):
 
 # ── Invoice detail ─────────────────────────────────────────────────────────────
 
+
 @action("api/workorders/<wo_id:int>/invoice", method=["GET"])
 @action.uses(db, session, auth)
 def work_order_invoice_detail(wo_id):
@@ -480,11 +588,14 @@ def work_order_invoice_detail(wo_id):
     if not invoice:
         raise HTTP(404, '{"error":"No invoice for this work order"}')
     labor = db(db.work_order_labor.work_order_id == wo_id).select(
-        orderby=db.work_order_labor.created_on)
+        orderby=db.work_order_labor.created_on
+    )
     parts = db(db.work_order_part.work_order_id == wo_id).select(
-        orderby=db.work_order_part.created_on)
+        orderby=db.work_order_part.created_on
+    )
     payments = db(db.payment.invoice_id == invoice.id).select(
-        orderby=db.payment.received_on)
+        orderby=db.payment.received_on
+    )
     customer = db.customer[wo.customer_id]
     equipment = db.equipment[wo.equipment_id]
     settings = db(db.shop_settings.id > 0).select().first()
@@ -501,6 +612,7 @@ def work_order_invoice_detail(wo_id):
 
 
 # ── Intake Document (printable authorization & agreement) ─────────────────────
+
 
 @action("api/workorders/<wo_id:int>/intake-doc", method=["GET"])
 @action.uses(db, session, auth)
@@ -520,4 +632,3 @@ def work_order_intake_doc(wo_id):
         employee=employee.as_dict() if employee else None,
         shop=settings.as_dict() if settings else {},
     )
-

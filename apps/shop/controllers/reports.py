@@ -1,6 +1,7 @@
 """
 Reports API endpoints.
 """
+
 import collections
 import datetime
 from py4web import action, HTTP
@@ -9,11 +10,14 @@ from ..common import db, auth, session, require_user
 
 # ── Helper for Cash Basis paid-in-full date ───────────────────────────────────
 
+
 def _get_paid_in_full_date(db, invoice_id):
     """Find the latest payment date for an invoice. Fallback to invoice modified_on/created_on."""
-    latest_payment = db(db.payment.invoice_id == invoice_id).select(
-        db.payment.received_on, orderby=~db.payment.received_on
-    ).first()
+    latest_payment = (
+        db(db.payment.invoice_id == invoice_id)
+        .select(db.payment.received_on, orderby=~db.payment.received_on)
+        .first()
+    )
     if latest_payment and latest_payment.received_on:
         return latest_payment.received_on
 
@@ -27,11 +31,13 @@ def _get_paid_in_full_date(db, invoice_id):
 
 # ── Revenue Report (Cash Basis Valuation) ──────────────────────────────────────
 
+
 @action("api/reports/revenue", method=["GET"])
 @action.uses(db, session, auth)
 def report_revenue():
     require_user()
     from ..contexts.accounting import AccountingContext
+
     ctx = AccountingContext(db)
     return dict(revenue=ctx.calculate_revenue_summary())
 
@@ -52,14 +58,30 @@ def report_revenue_detail(month):
     except Exception:
         raise HTTP(400, "Invalid month format. Expected YYYY-MM.")
 
-    # 1. Closed & paid WOs in range
-    all_wos = db((db.work_order.status == "closed") & (db.invoice.status == "paid")).select(
-        db.work_order.id, db.work_order.work_type, db.customer.first_name, db.customer.last_name,
+    # 1. Closed & paid WOs in range (bounded: payment or invoice touch within the month)
+    has_payment_in_range = db(
+        (db.payment.received_on >= start_date) & (db.payment.received_on < end_date)
+    ).select(db.payment.invoice_id)
+    all_wos = db(
+        (db.work_order.status == "closed")
+        & (db.invoice.status == "paid")
+        & (
+            db.invoice.id.belongs(has_payment_in_range)
+            | (
+                (db.invoice.modified_on >= start_date)
+                & (db.invoice.modified_on < end_date)
+            )
+        )
+    ).select(
+        db.work_order.id,
+        db.work_order.work_type,
+        db.customer.first_name,
+        db.customer.last_name,
         db.invoice.id,
         left=[
             db.customer.on(db.work_order.customer_id == db.customer.id),
-            db.invoice.on(db.invoice.work_order_id == db.work_order.id)
-        ]
+            db.invoice.on(db.invoice.work_order_id == db.work_order.id),
+        ],
     )
     wos = []
     for r in all_wos:
@@ -70,12 +92,21 @@ def report_revenue_detail(month):
         if ref_date and start_date <= ref_date < end_date:
             wos.append((r, ref_date))
 
-    # 2. Paid Sales in range
-    all_sales = db(db.sale.status == "paid").select(
-        db.sale.id, db.sale.sale_date, db.sale.equipment_id, db.sale.cash_customer_name,
-        db.sale.sale_price, db.sale.trade_in_value,
-        db.customer.first_name, db.customer.last_name,
-        left=db.customer.on(db.sale.customer_id == db.customer.id)
+    # 2. Paid Sales in range (bounded by sale_date)
+    all_sales = db(
+        (db.sale.status == "paid")
+        & (db.sale.sale_date >= start_date)
+        & (db.sale.sale_date < end_date)
+    ).select(
+        db.sale.id,
+        db.sale.sale_date,
+        db.sale.equipment_id,
+        db.sale.cash_customer_name,
+        db.sale.sale_price,
+        db.sale.trade_in_value,
+        db.customer.first_name,
+        db.customer.last_name,
+        left=db.customer.on(db.sale.customer_id == db.customer.id),
     )
     sales = []
     for r in all_sales:
@@ -89,29 +120,36 @@ def report_revenue_detail(month):
         wo = r.work_order
         from ..roles.base import cast
         from ..roles.work_order_roles import BillableWorkRole
+
         wo_cast = cast(wo, BillableWorkRole, table_name="work_order")
         labor = float(wo_cast.labor_total(db))
         parts_total = float(wo_cast.parts_total(db) - wo_cast.warranty_parts_total(db))
 
         # Calculate parts cost
         parts_cost = 0.0
-        p_lines = db((db.work_order_part.work_order_id == wo.id) & (db.work_order_part.is_warranty == False)).select(
-            db.work_order_part.unit_cost, db.work_order_part.quantity
-        )
+        p_lines = db(
+            (db.work_order_part.work_order_id == wo.id)
+            & (db.work_order_part.is_warranty == False)
+        ).select(db.work_order_part.unit_cost, db.work_order_part.quantity)
         for line in p_lines:
             parts_cost += float(line.unit_cost or 0.0) * int(line.quantity or 0)
 
-        cust = f"{r.customer.first_name or ''} {r.customer.last_name or ''}".strip() or "Unknown"
+        cust = (
+            f"{r.customer.first_name or ''} {r.customer.last_name or ''}".strip()
+            or "Unknown"
+        )
         rev = labor + parts_total
 
-        details.append({
-            "date": str(ref_d)[:10],
-            "type": f"Work Order #{wo.id}",
-            "description": f"{wo.work_type.capitalize()} for {cust}",
-            "revenue": float(rev),
-            "cogs": float(parts_cost),
-            "gross_profit": float(rev - parts_cost)
-        })
+        details.append(
+            {
+                "date": str(ref_d)[:10],
+                "type": f"Work Order #{wo.id}",
+                "description": f"{wo.work_type.capitalize()} for {cust}",
+                "revenue": float(rev),
+                "cogs": float(parts_cost),
+                "gross_profit": float(rev - parts_cost),
+            }
+        )
 
     for r in sales:
         s = r.sale
@@ -124,34 +162,43 @@ def report_revenue_detail(month):
             equip = db.equipment[s.equipment_id]
             cost = float(equip.acquisition_cost or 0.0) if equip else 0.0
 
-            details.append({
-                "date": str(s.sale_date),
-                "type": f"Equipment Sale #{s.id}",
-                "description": f"Sold equipment to {cust}",
-                "revenue": float(rev),
-                "cogs": float(cost),
-                "gross_profit": float(rev - cost)
-            })
+            details.append(
+                {
+                    "date": str(s.sale_date),
+                    "type": f"Equipment Sale #{s.id}",
+                    "description": f"Sold equipment to {cust}",
+                    "revenue": float(rev),
+                    "cogs": float(cost),
+                    "gross_profit": float(rev - cost),
+                }
+            )
         else:
-            rev = db(db.sale_line.sale_id == s.id).select(
-                db.sale_line.total.sum()
-            ).first()[db.sale_line.total.sum()] or 0.0
+            rev = (
+                db(db.sale_line.sale_id == s.id)
+                .select(db.sale_line.total.sum())
+                .first()[db.sale_line.total.sum()]
+                or 0.0
+            )
             rev = float(rev)
 
             # Parts cost
             cost = 0.0
-            lines = db(db.sale_line.sale_id == s.id).select(db.sale_line.unit_cost, db.sale_line.quantity)
+            lines = db(db.sale_line.sale_id == s.id).select(
+                db.sale_line.unit_cost, db.sale_line.quantity
+            )
             for line in lines:
                 cost += float(line.unit_cost or 0.0) * int(line.quantity or 0)
 
-            details.append({
-                "date": str(s.sale_date),
-                "type": f"Retail POS #{s.id}",
-                "description": f"Parts purchased by {cust}",
-                "revenue": float(rev),
-                "cogs": float(cost),
-                "gross_profit": float(rev - cost)
-            })
+            details.append(
+                {
+                    "date": str(s.sale_date),
+                    "type": f"Retail POS #{s.id}",
+                    "description": f"Parts purchased by {cust}",
+                    "revenue": float(rev),
+                    "cogs": float(cost),
+                    "gross_profit": float(rev - cost),
+                }
+            )
 
     details.sort(key=lambda x: x["date"], reverse=True)
     return dict(details=details)
@@ -159,14 +206,17 @@ def report_revenue_detail(month):
 
 # ── Technicians Report ────────────────────────────────────────────────────────
 
+
 @action("api/reports/technicians", method=["GET"])
 @action.uses(db, session, auth)
 def report_technicians():
     require_user()
     rows = db(db.work_order.status == "closed").select(
-        db.work_order.id, db.work_order.employee_id,
-        db.employee.first_name, db.employee.last_name,
-        left=db.employee.on(db.work_order.employee_id == db.employee.id)
+        db.work_order.id,
+        db.work_order.employee_id,
+        db.employee.first_name,
+        db.employee.last_name,
+        left=db.employee.on(db.work_order.employee_id == db.employee.id),
     )
 
     techs_data = {}
@@ -184,12 +234,27 @@ def report_technicians():
 
         techs_data[emp_id]["completed"] += 1
 
-        labor_lines = db(db.work_order_labor.work_order_id == r.work_order.id).select(
-            db.work_order_labor.hours, db.work_order_labor.total
-        )
-        for line in labor_lines:
-            techs_data[emp_id]["hours"] += float(line.hours or 0.0)
-            techs_data[emp_id]["revenue"] += float(line.total or 0.0)
+    # Bulk: labor hours + revenue per work order (one query instead of one per WO)
+    wo_to_emp = {r.work_order.id: (r.work_order.employee_id or 0) for r in rows}
+    wo_ids = list(wo_to_emp.keys())
+    if wo_ids:
+        for r in (
+            db(db.work_order_labor.work_order_id.belongs(wo_ids))
+            .select(
+                db.work_order_labor.work_order_id,
+                db.work_order_labor.hours.sum(),
+                db.work_order_labor.total.sum(),
+            )
+            .groupby(db.work_order_labor.work_order_id)
+        ):
+            emp_id = wo_to_emp.get(r.work_order_labor.work_order_id)
+            if emp_id in techs_data:
+                techs_data[emp_id]["hours"] += float(
+                    r.work_order_labor[db.work_order_labor.hours.sum()] or 0.0
+                )
+                techs_data[emp_id]["revenue"] += float(
+                    r.work_order_labor[db.work_order_labor.total.sum()] or 0.0
+                )
 
     return dict(technicians=list(techs_data.values()))
 
@@ -198,10 +263,16 @@ def report_technicians():
 @action.uses(db, session, auth)
 def report_technician_detail(emp_id):
     require_user()
-    wos = db((db.work_order.status == "closed") & (db.work_order.employee_id == emp_id)).select(
-        db.work_order.id, db.work_order.date_out, db.work_order.reported_problem,
-        db.customer.first_name, db.customer.last_name,
-        db.equipment.make, db.equipment.model,
+    wos = db(
+        (db.work_order.status == "closed") & (db.work_order.employee_id == emp_id)
+    ).select(
+        db.work_order.id,
+        db.work_order.date_out,
+        db.work_order.reported_problem,
+        db.customer.first_name,
+        db.customer.last_name,
+        db.equipment.make,
+        db.equipment.model,
         left=[
             db.customer.on(db.work_order.customer_id == db.customer.id),
             db.equipment.on(db.work_order.equipment_id == db.equipment.id),
@@ -209,27 +280,44 @@ def report_technician_detail(emp_id):
         orderby=~db.work_order.date_out,
     )
 
+    # Bulk: labor hours + revenue per work order (one query instead of one per WO)
+    wo_ids = [r.work_order.id for r in wos]
+    labor_by_wo = {}
+    if wo_ids:
+        for r in (
+            db(db.work_order_labor.work_order_id.belongs(wo_ids))
+            .select(
+                db.work_order_labor.work_order_id,
+                db.work_order_labor.hours.sum(),
+                db.work_order_labor.total.sum(),
+            )
+            .groupby(db.work_order_labor.work_order_id)
+        ):
+            labor_by_wo[r.work_order_labor.work_order_id] = (
+                float(r.work_order_labor[db.work_order_labor.hours.sum()] or 0.0),
+                float(r.work_order_labor[db.work_order_labor.total.sum()] or 0.0),
+            )
+
     details = []
     for r in wos:
-        labor_lines = db(db.work_order_labor.work_order_id == r.work_order.id).select(
-            db.work_order_labor.hours, db.work_order_labor.total
-        )
-        hours = sum(float(l.hours or 0) for l in labor_lines)
-        revenue = sum(float(l.total or 0) for l in labor_lines)
+        hours, revenue = labor_by_wo.get(r.work_order.id, (0.0, 0.0))
 
-        details.append({
-            "id": r.work_order.id,
-            "date": str(r.work_order.date_out),
-            "customer_name": f"{r.customer.first_name or ''} {r.customer.last_name or ''}".strip(),
-            "equip_desc": f"{r.equipment.make or ''} {r.equipment.model or ''}".strip(),
-            "problem": r.work_order.reported_problem,
-            "hours": hours,
-            "revenue": revenue
-        })
+        details.append(
+            {
+                "id": r.work_order.id,
+                "date": str(r.work_order.date_out),
+                "customer_name": f"{r.customer.first_name or ''} {r.customer.last_name or ''}".strip(),
+                "equip_desc": f"{r.equipment.make or ''} {r.equipment.model or ''}".strip(),
+                "problem": r.work_order.reported_problem,
+                "hours": hours,
+                "revenue": revenue,
+            }
+        )
     return dict(details=details)
 
 
 # ── Warranty Report ───────────────────────────────────────────────────────────
+
 
 @action("api/reports/warranty", method=["GET"])
 @action.uses(db, session, auth)
@@ -242,17 +330,23 @@ def report_warranty():
         submitted_count = len(claims)
         paid_count = sum(1 for c in claims if c.status == "paid")
 
-        total_submitted = sum(float((c.covered_labor or 0) + (c.covered_parts or 0)) for c in claims)
-        total_paid = sum(float(c.reimbursement_amount or 0) for c in claims if c.status == "paid")
+        total_submitted = sum(
+            float((c.covered_labor or 0) + (c.covered_parts or 0)) for c in claims
+        )
+        total_paid = sum(
+            float(c.reimbursement_amount or 0) for c in claims if c.status == "paid"
+        )
 
-        result.append({
-            "id": m.id,
-            "name": m.name,
-            "submitted_count": submitted_count,
-            "paid_count": paid_count,
-            "total_submitted": total_submitted,
-            "total_paid": total_paid
-        })
+        result.append(
+            {
+                "id": m.id,
+                "name": m.name,
+                "submitted_count": submitted_count,
+                "paid_count": paid_count,
+                "total_submitted": total_submitted,
+                "total_paid": total_paid,
+            }
+        )
     return dict(warranty=result)
 
 
@@ -263,8 +357,10 @@ def report_warranty_detail(mfr_id):
     claims = db(db.warranty_claim.manufacturer_id == mfr_id).select(
         db.warranty_claim.ALL,
         db.work_order.id,
-        db.customer.first_name, db.customer.last_name,
-        db.equipment.make, db.equipment.model,
+        db.customer.first_name,
+        db.customer.last_name,
+        db.equipment.make,
+        db.equipment.model,
         left=[
             db.work_order.on(db.warranty_claim.work_order_id == db.work_order.id),
             db.customer.on(db.work_order.customer_id == db.customer.id),
@@ -277,30 +373,37 @@ def report_warranty_detail(mfr_id):
     for r in claims:
         c = r.warranty_claim
         claimed_total = float((c.covered_labor or 0) + (c.covered_parts or 0))
-        details.append({
-            "id": c.id,
-            "work_order_id": c.work_order_id,
-            "mfr_claim_number": c.mfr_claim_number or "—",
-            "customer_name": f"{r.customer.first_name or ''} {r.customer.last_name or ''}".strip(),
-            "equip_desc": f"{r.equipment.make or ''} {r.equipment.model or ''}".strip(),
-            "submitted_date": str(c.submitted_date),
-            "status": c.status,
-            "covered_labor": float(c.covered_labor or 0),
-            "covered_parts": float(c.covered_parts or 0),
-            "total_claimed": claimed_total,
-            "reimbursement_amount": float(c.reimbursement_amount or 0) if c.status == "paid" else None,
-            "payment_date": str(c.payment_date) if c.payment_date else None
-        })
+        details.append(
+            {
+                "id": c.id,
+                "work_order_id": c.work_order_id,
+                "mfr_claim_number": c.mfr_claim_number or "—",
+                "customer_name": f"{r.customer.first_name or ''} {r.customer.last_name or ''}".strip(),
+                "equip_desc": f"{r.equipment.make or ''} {r.equipment.model or ''}".strip(),
+                "submitted_date": str(c.submitted_date),
+                "status": c.status,
+                "covered_labor": float(c.covered_labor or 0),
+                "covered_parts": float(c.covered_parts or 0),
+                "total_claimed": claimed_total,
+                "reimbursement_amount": float(c.reimbursement_amount or 0)
+                if c.status == "paid"
+                else None,
+                "payment_date": str(c.payment_date) if c.payment_date else None,
+            }
+        )
     return dict(details=details)
 
 
 # ── Inventory Report ──────────────────────────────────────────────────────────
 
+
 @action("api/reports/inventory", method=["GET"])
 @action.uses(db, session, auth)
 def report_inventory():
     require_user()
-    parts = db(db.part.active == True).select(db.part.qty_on_hand, db.part.cost, db.part.price)
+    parts = db(db.part.active == True).select(
+        db.part.qty_on_hand, db.part.cost, db.part.price
+    )
 
     total_qty = 0
     total_cost_val = 0.0
@@ -313,7 +416,9 @@ def report_inventory():
         total_retail_val += qty * float(p.price or 0.0)
 
     # Load grouped categories data as well
-    categories_dict = collections.defaultdict(lambda: {"qty": 0, "cost": 0.0, "price": 0.0, "count": 0})
+    categories_dict = collections.defaultdict(
+        lambda: {"qty": 0, "cost": 0.0, "price": 0.0, "count": 0}
+    )
     all_parts = db(db.part.active == True).select()
 
     for p in all_parts:
@@ -335,16 +440,20 @@ def report_inventory():
     categories_list = []
     for cat, d in categories_dict.items():
         margin = d["price"] - d["cost"]
-        categories_list.append({
-            "category": cat.capitalize(),
-            "category_val": cat,
-            "count": d["count"],
-            "qty": d["qty"],
-            "cost": f"{float(d['cost']):,.2f}",
-            "price": f"{float(d['price']):,.2f}",
-            "margin": f"{float(margin):,.2f}",
-            "markup_pct": f"{(margin / d['cost']) * 100:.1f}" if d["cost"] > 0 else "0.0"
-        })
+        categories_list.append(
+            {
+                "category": cat.capitalize(),
+                "category_val": cat,
+                "count": d["count"],
+                "qty": d["qty"],
+                "cost": f"{float(d['cost']):,.2f}",
+                "price": f"{float(d['price']):,.2f}",
+                "margin": f"{float(margin):,.2f}",
+                "markup_pct": f"{(margin / d['cost']) * 100:.1f}"
+                if d["cost"] > 0
+                else "0.0",
+            }
+        )
 
     return dict(
         inventory={
@@ -353,7 +462,7 @@ def report_inventory():
             "total_cost_value": total_cost_val,
             "total_retail_value": total_retail_val,
             "potential_margin": total_retail_val - total_cost_val,
-            "categories": categories_list
+            "categories": categories_list,
         }
     )
 
@@ -364,25 +473,33 @@ def report_inventory_category_detail(cat_name):
     require_user()
     if cat_name == "other":
         parts = db(
-            (db.part.active == True) &
-            ((db.part.compatible_categories == "") | (db.part.compatible_categories == None))
+            (db.part.active == True)
+            & (
+                (db.part.compatible_categories == "")
+                | (db.part.compatible_categories == None)
+            )
         ).select()
     else:
-        parts = db((db.part.active == True) & (db.part.compatible_categories.contains(cat_name))).select()
+        parts = db(
+            (db.part.active == True)
+            & (db.part.compatible_categories.contains(cat_name))
+        ).select()
 
     details = []
     for p in parts:
         qty = p.qty_on_hand or 0
         c_val = qty * float(p.cost or 0.0)
         p_val = qty * float(p.price or 0.0)
-        details.append({
-            "part_number": p.part_number,
-            "description": p.description,
-            "qty_on_hand": qty,
-            "cost": f"{float(p.cost or 0):.2f}",
-            "price": f"{float(p.price or 0):.2f}",
-            "total_cost_val": f"{c_val:.2f}",
-            "total_price_val": f"{p_val:.2f}",
-            "margin": f"{(p_val - c_val):.2f}"
-        })
+        details.append(
+            {
+                "part_number": p.part_number,
+                "description": p.description,
+                "qty_on_hand": qty,
+                "cost": f"{float(p.cost or 0):.2f}",
+                "price": f"{float(p.price or 0):.2f}",
+                "total_cost_val": f"{c_val:.2f}",
+                "total_price_val": f"{p_val:.2f}",
+                "margin": f"{(p_val - c_val):.2f}",
+            }
+        )
     return dict(parts=details)
