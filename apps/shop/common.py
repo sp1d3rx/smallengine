@@ -3,7 +3,7 @@ Shared fixtures: db, session, auth, groups.
 Everything that needs db/auth imports from here.
 """
 import os
-from py4web import Session, DAL, Field, HTTP
+from py4web import Session, DAL, HTTP
 from py4web.utils.auth import Auth
 from pydal.tools.tags import Tags
 from pydal.validators import *  # noqa: F401,F403

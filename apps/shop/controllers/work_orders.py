@@ -161,8 +161,6 @@ def promise_date():
     from ..contexts.repair import RepairIntakeContext
 
     # Use a throwaway context just for the calculation (no rows needed)
-    from ..roles.base import RoleObject
-    import types
 
     ctx = object.__new__(RepairIntakeContext)
     ctx.db = db

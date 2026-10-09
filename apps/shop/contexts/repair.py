@@ -1,10 +1,10 @@
 """Repair domain contexts — use cases across the work order lifecycle."""
-import datetime
+
 import math
 from datetime import date, timedelta
 from decimal import Decimal
 
-from ..gantrika.context import BaseContext, ValidationError, BusinessRuleError
+from ..gantrika.context import BaseContext, BusinessRuleError
 from ..roles.base import cast
 from ..roles.customer_roles import EquipmentOwnerRole
 from ..roles.equipment_roles import RepairableRole
@@ -13,7 +13,6 @@ from ..roles.work_order_roles import (
     ProgressableRole,
     BillableWorkRole,
     NotifiableRole,
-    WarrantyEligibleRole,
 )
 from ..roles.parts_roles import StockableRole
 from ..settings import DEFAULT_LABOR_RATE, ESTIMATE_APPROVAL_THRESHOLD, SALES_TAX_RATE
@@ -32,6 +31,7 @@ def _add_workdays(start: date, days: int) -> date:
 
 # ── Intake ────────────────────────────────────────────────────────────────────
 
+
 class RepairIntakeContext(BaseContext):
     """Customer brings equipment in for service. Validates equipment and calculates promise date."""
 
@@ -42,7 +42,13 @@ class RepairIntakeContext(BaseContext):
 
     def calculate_promise_date(self, work_type: str = "repair") -> date:
         today = date.today()
-        active_statuses = ["intake", "diagnosed", "awaiting_approval", "in_repair", "awaiting_parts"]
+        active_statuses = [
+            "intake",
+            "diagnosed",
+            "awaiting_approval",
+            "in_repair",
+            "awaiting_parts",
+        ]
         backlog = self.db(self.db.work_order.status.belongs(active_statuses)).count()
 
         thirty_days_ago = today - timedelta(days=30)
@@ -58,10 +64,16 @@ class RepairIntakeContext(BaseContext):
 
         return _add_workdays(today, days_needed)
 
-    def execute(self, reported_problem: str, work_type: str = "repair",
-                employee_id: int = None, date_promised: date = None,
-                notes: str = "", pre_approved_limit: Decimal = None,
-                estimated_cost: Decimal = None) -> int:
+    def execute(
+        self,
+        reported_problem: str,
+        work_type: str = "repair",
+        employee_id: int = None,
+        date_promised: date = None,
+        notes: str = "",
+        pre_approved_limit: Decimal = None,
+        estimated_cost: Decimal = None,
+    ) -> int:
         if not self.equipment.is_customer_owned():
             raise BusinessRuleError("Equipment is shop inventory, not customer-owned")
 
@@ -88,23 +100,25 @@ class RepairIntakeContext(BaseContext):
 
 # ── Diagnosis ─────────────────────────────────────────────────────────────────
 
+
 class DiagnoseRepairContext(BaseContext):
     """Technician records diagnosis and estimate; checks if approval is required."""
 
     def __init__(self, db, work_order_row):
         super().__init__(db)
-        self.work_order = cast(work_order_row, DiagnosableRole, ProgressableRole,
-                               table_name="work_order")
+        self.work_order = cast(
+            work_order_row, DiagnosableRole, ProgressableRole, table_name="work_order"
+        )
 
     def execute(self, diagnosis: str, estimated_cost: Decimal) -> dict:
         with self.transaction():
             wo = self.work_order
             wo.record_diagnosis(self.db, diagnosis, estimated_cost)
-            wo.advance(self.db)   # intake → diagnosed
+            wo.advance(self.db)  # intake → diagnosed
 
             needs_approval = estimated_cost > Decimal(str(ESTIMATE_APPROVAL_THRESHOLD))
             if needs_approval:
-                wo.request_approval(self.db)   # diagnosed → awaiting_approval
+                wo.request_approval(self.db)  # diagnosed → awaiting_approval
                 new_status = "awaiting_approval"
             else:
                 new_status = "diagnosed"
@@ -119,32 +133,44 @@ class DiagnoseRepairContext(BaseContext):
 
 # ── Approval ──────────────────────────────────────────────────────────────────
 
+
 class RecordApprovalContext(BaseContext):
     """Customer approves or declines the repair estimate."""
 
     def __init__(self, db, work_order_row):
         super().__init__(db)
-        self.work_order = cast(work_order_row, ProgressableRole, table_name="work_order")
+        self.work_order = cast(
+            work_order_row, ProgressableRole, table_name="work_order"
+        )
 
-    def execute(self, approved: bool, decline_reason: str = "customer_declined",
-                decline_detail: str = "") -> dict:
+    def execute(
+        self,
+        approved: bool,
+        decline_reason: str = "customer_declined",
+        decline_detail: str = "",
+    ) -> dict:
         with self.transaction():
             wo = self.work_order
             if approved:
-                new_status = wo.approve(self.db)   # awaiting_approval → in_repair
+                new_status = wo.approve(self.db)  # awaiting_approval → in_repair
             else:
-                new_status = wo.cancel(self.db, reason=decline_reason, detail=decline_detail)
+                new_status = wo.cancel(
+                    self.db, reason=decline_reason, detail=decline_detail
+                )
             return {"approved": approved, "status": new_status}
 
 
 # ── Cancel ────────────────────────────────────────────────────────────────────
+
 
 class CancelRepairContext(BaseContext):
     """Cancel a work order with documented reasons."""
 
     def __init__(self, db, work_order_row):
         super().__init__(db)
-        self.work_order = cast(work_order_row, ProgressableRole, table_name="work_order")
+        self.work_order = cast(
+            work_order_row, ProgressableRole, table_name="work_order"
+        )
 
     def execute(self, reason: str, detail: str = "") -> dict:
         with self.transaction():
@@ -154,12 +180,15 @@ class CancelRepairContext(BaseContext):
 
 # ── Parts availability ────────────────────────────────────────────────────────
 
+
 class NeedPartsContext(BaseContext):
     """Tech flags that parts are awaited."""
 
     def __init__(self, db, work_order_row):
         super().__init__(db)
-        self.work_order = cast(work_order_row, ProgressableRole, table_name="work_order")
+        self.work_order = cast(
+            work_order_row, ProgressableRole, table_name="work_order"
+        )
 
     def execute(self) -> dict:
         with self.transaction():
@@ -172,7 +201,9 @@ class PartsArrivedContext(BaseContext):
 
     def __init__(self, db, work_order_row):
         super().__init__(db)
-        self.work_order = cast(work_order_row, ProgressableRole, table_name="work_order")
+        self.work_order = cast(
+            work_order_row, ProgressableRole, table_name="work_order"
+        )
 
     def execute(self) -> dict:
         with self.transaction():
@@ -182,6 +213,7 @@ class PartsArrivedContext(BaseContext):
 
 # ── Labor / Parts lines ───────────────────────────────────────────────────────
 
+
 class AddLaborContext(BaseContext):
     """Add a labor line to an open work order."""
 
@@ -189,10 +221,16 @@ class AddLaborContext(BaseContext):
         super().__init__(db)
         self.work_order = work_order_row
 
-    def execute(self, description: str, hours: Decimal,
-                rate: Decimal = None, employee_id: int = None,
-                is_warranty: bool = False) -> int:
-        rate = rate or Decimal(str(DEFAULT_LABOR_RATE))
+    def execute(
+        self,
+        description: str,
+        hours: Decimal,
+        rate: Decimal = None,
+        employee_id: int = None,
+        is_warranty: bool = False,
+    ) -> int:
+        if rate is None:
+            rate = Decimal(str(DEFAULT_LABOR_RATE))
         total = hours * rate
         with self.transaction():
             line_id = self.db.work_order_labor.insert(
@@ -214,25 +252,41 @@ class AddPartContext(BaseContext):
         super().__init__(db)
         self.work_order = work_order_row
 
-    def execute(self, quantity: int, unit_price: Decimal,
-                part_id: int = None, description: str = None,
-                unit_cost: Decimal = None, is_warranty: bool = False) -> int:
+    def execute(
+        self,
+        quantity: int,
+        unit_price: Decimal,
+        part_id: int = None,
+        description: str = None,
+        unit_cost: Decimal = None,
+        is_warranty: bool = False,
+    ) -> int:
         with self.transaction():
             if part_id:
                 part_row = self.db.part[part_id]
                 if part_row:
                     stockable = cast(part_row, StockableRole, table_name="part")
                     description = description or part_row.description
-                    unit_cost = unit_cost or Decimal(str(part_row.cost))
+                    if unit_cost is None:
+                        unit_cost = Decimal(str(part_row.cost))
 
                     # If already present on work order, increment quantity
-                    existing = self.db(
-                        (self.db.work_order_part.work_order_id == self.work_order.id) &
-                        (self.db.work_order_part.part_id == part_id)
-                    ).select().first()
+                    existing = (
+                        self.db(
+                            (
+                                self.db.work_order_part.work_order_id
+                                == self.work_order.id
+                            )
+                            & (self.db.work_order_part.part_id == part_id)
+                        )
+                        .select()
+                        .first()
+                    )
                     if existing:
                         new_qty = existing.quantity + quantity
-                        new_total = Decimal(str(new_qty)) * Decimal(str(existing.unit_price))
+                        new_total = Decimal(str(new_qty)) * Decimal(
+                            str(existing.unit_price)
+                        )
                         stockable.consume(self.db, quantity, self.work_order.id)
                         self.db.work_order_part[existing.id] = dict(
                             quantity=new_qty,
@@ -258,16 +312,23 @@ class AddPartContext(BaseContext):
 
 # ── Close ─────────────────────────────────────────────────────────────────────
 
+
 class GenerateInvoiceContext(BaseContext):
     """Generate (or retrieve) an invoice for a work order without closing it."""
 
     def __init__(self, db, work_order_row):
         super().__init__(db)
-        self.work_order = cast(work_order_row, BillableWorkRole, table_name="work_order")
+        self.work_order = cast(
+            work_order_row, BillableWorkRole, table_name="work_order"
+        )
 
     def execute(self) -> dict:
         tax_rate = Decimal(str(SALES_TAX_RATE))
-        existing = self.db(self.db.invoice.work_order_id == self.work_order.id).select().first()
+        existing = (
+            self.db(self.db.invoice.work_order_id == self.work_order.id)
+            .select()
+            .first()
+        )
         if existing:
             return {"invoice_id": existing.id, "already_existed": True}
 
@@ -293,23 +354,32 @@ class CloseRepairContext(BaseContext):
 
     def __init__(self, db, work_order_row):
         super().__init__(db)
-        self.work_order = cast(work_order_row, ProgressableRole, table_name="work_order")
+        self.work_order = cast(
+            work_order_row, ProgressableRole, table_name="work_order"
+        )
 
     def execute(self) -> dict:
         if self.work_order.status != "ready":
-            raise BusinessRuleError(f"Work order must be 'ready' to close (got '{self.work_order.status}')")
-        invoice = self.db(self.db.invoice.work_order_id == self.work_order.id).select().first()
+            raise BusinessRuleError(
+                f"Work order must be 'ready' to close (got '{self.work_order.status}')"
+            )
+        invoice = (
+            self.db(self.db.invoice.work_order_id == self.work_order.id)
+            .select()
+            .first()
+        )
         if not invoice:
             raise BusinessRuleError("Generate invoice before closing")
         if invoice.status != "paid":
             raise BusinessRuleError("Invoice must be fully paid before closing")
 
         with self.transaction():
-            self.work_order.advance(self.db)   # ready → closed
+            self.work_order.advance(self.db)  # ready → closed
             return {"status": "closed"}
 
 
 # ── Customer ready notification ───────────────────────────────────────────────
+
 
 class NotifyReadyContext(BaseContext):
     """Record that customer was notified their unit is ready for pickup."""

@@ -6,7 +6,7 @@ Auth-adjacent controllers:
 """
 from py4web import action, request, redirect, URL, HTTP
 from pydal.validators import CRYPT, IS_EMAIL
-from ..common import db, auth, session, groups, require_user, require_admin, is_admin
+from ..common import db, auth, session, groups, require_admin
 
 
 # ── First-run setup ───────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ def setup_post():
         errors["first_name"] = "Required"
     if not last_name:
         errors["last_name"] = "Required"
-    if not email or not IS_EMAIL()(email)[1] is None:
+    if not email or IS_EMAIL()(email)[1] is not None:
         # IS_EMAIL returns (value, error); error is None when valid
         val, err = IS_EMAIL()(email)
         if err:

@@ -1,7 +1,7 @@
 """Sales and Retail POS domain contexts."""
 from datetime import date
 from decimal import Decimal
-from ..gantrika.context import BaseContext, ValidationError, NotFoundError, BusinessRuleError
+from ..gantrika.context import BaseContext, NotFoundError, BusinessRuleError
 from ..roles.base import cast
 from ..roles.customer_roles import BillableRole
 from ..roles.equipment_roles import SellableRole, TradeInRole

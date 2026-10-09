@@ -1,6 +1,5 @@
 """Gantrika Server Response — Standard JSON envelope helpers."""
 from py4web import response
-import json
 
 def json_ok(data=None, meta=None, status=200):
     """Return a successful JSON response with a standard envelope."""

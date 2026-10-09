@@ -4,7 +4,6 @@ Customer API endpoints — thin controllers that parse requests and call context
 import datetime
 from py4web import action, request, HTTP
 from ..common import db, auth, session, require_user
-from ..data.tables import EQUIPMENT_CATEGORIES, EQUIPMENT_CONDITIONS
 
 
 # ── Helper for Cash Basis paid-in-full date ───────────────────────────────────

@@ -10,7 +10,7 @@ from ..contexts.sales import (
     VoidRetailSaleContext,
     ReturnRetailSaleContext,
 )
-from ..gantrika.context import NotFoundError, BusinessRuleError, ValidationError
+from ..gantrika.context import NotFoundError, BusinessRuleError
 
 
 # ── Create draft sale ──────────────────────────────────────────────────────────

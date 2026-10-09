@@ -2,7 +2,6 @@
 
 import collections
 import datetime
-from decimal import Decimal
 from ..gantrika.context import BaseContext
 
 

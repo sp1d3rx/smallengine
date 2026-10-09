@@ -1,7 +1,7 @@
 """Purchasing domain contexts: create POs, receive lines, cancel, add/delete lines."""
 import datetime
 from decimal import Decimal
-from ..gantrika.context import BaseContext, ValidationError, NotFoundError, BusinessRuleError
+from ..gantrika.context import BaseContext, ValidationError, BusinessRuleError
 from ..roles.base import cast
 from ..roles.parts_roles import StockableRole
 
