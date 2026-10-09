@@ -79,6 +79,45 @@ The app follows the **DCI** (Data, Context, Interaction) pattern:
 
 Controllers stay thin: business rules belong in contexts, and row behavior belongs in roles.
 
+### Gantrika
+
+**Gantrika** is the thin, home-grown framework layer that spans the whole stack. It is not a
+dependency — it is vendored in this repo (see `apps/shop/gantrika/` and
+`apps/shop/static/py/gantrika/`) and is the only thing standing between your DCI code and the
+raw py4web/Brython plumbing.
+
+The name is a diminutive of **gantry**, borrowed through Russian: *гантри* (*gantri*) + the
+diminutive suffix *-ка* (*-ka*) → **гантрика** (*gantrika*), "little gantry." A gantry is a
+load-bearing frame that spans a structure without being the structure itself — which is exactly
+what this library does: a small, load-bearing frame over py4web + Brython, not a full framework.
+
+It is split into two halves that share the name:
+
+**Server half — [`apps/shop/gantrika/`](apps/shop/gantrika/)** (the DCI service-layer glue)
+
+| Module | Provides |
+|--------|----------|
+| `response.py` | Standard JSON envelope: `json_ok`, `json_error`, `json_paginated` — every endpoint returns the same `{status, data, meta}` / `{status, error, errors}` shape |
+| `context.py` | `BaseContext` (base for all `contexts/`): holds `db`/`auth`, a `transaction()` commit/rollback context manager, `validate_required()`, `filter_allowed()`; plus `ValidationError`, `NotFoundError`, `BusinessRuleError` |
+
+**Client half — [`apps/shop/static/py/gantrika/`](apps/shop/static/py/gantrika/)** (a desktop-class Python SPA framework for Brython)
+
+| Module | Provides |
+|--------|----------|
+| `router.py` | Declarative hash router: `<name:int>`/`<name:float>`/`<name:str>` param patterns compiled to regex, `before_each`/`after_each` navigation guards, 404 + error handlers, auto active-state on nav links |
+| `resource.py` | Declarative REST client: `Resource(base_url)` → `.list/.get/.create/.update/.patch/.delete/.action` over a synchronous `request()` bridge on Brython `ajax`; raises `ApiError` on non-2xx |
+| `store.py` | Central state store + event emitter: `get/set/update`, per-key or `*` `subscribe`, and `on/emit` for named events |
+| `view.py` | `View` base class with lifecycle hooks `mount → render → bind_events → unmount` and `on_click/on_input/on_change/on_submit` helpers |
+| `split_view.py` | `SplitPaneView`: master-detail two-column workbench with built-in debounced live search + row-selection state |
+| `ui.py` | `Toast`, `Modal` (incl. `confirm` dialogs), Handlebars template compile/render, and the `safe_action` decorator (traps `ApiError` → error toast) |
+| `forms.py` | Two-way form binding: `form_data` (DOM → dict, with type coercion), `populate_form` (dict → DOM), inline `set_form_errors`/`clear_form_errors` |
+| `formatters.py` | Domain formatting vocabulary: `currency`, `short_date`, `local_time`, `human_days_ago`, `percentage`, `delta_qty` |
+
+**Design philosophy.** One language end-to-end — the same Python on server and client, with only
+Handlebars templates and CSS as non-Python. Gantrika is opinionated but tiny: it does not replace
+py4web/pydal, it standardizes the JSON contract, the service layer, and the SPA ergonomics.
+Server = DCI (roles/contexts/controllers); client = SPA (router/store/view/resource).
+
 ### Project structure
 
 ```
@@ -92,10 +131,11 @@ apps/shop/
   roles/               # DCI roles (mixin behavior on domain rows)
   contexts/            # DCI contexts (business logic / use cases)
   controllers/         # thin HTTP layer (JSON API + page routes)
-  gantrika/            # small framework helpers (JSON envelope, base context)
+  gantrika/            # Gantrika server half (JSON envelope, BaseContext, domain errors)
   templates/           # server-rendered shell + Handlebars partials
   static/
     py/                # Brython (client-side Python)
+      gantrika/        # Gantrika client half (router, resource, store, view, ui, forms, formatters)
     css/               # app.css
     templates/         # client-side templates
   example/             # standalone design mockups
