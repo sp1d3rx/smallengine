@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Certified Small Engine — Shop</title>
+
+  <!-- Fonts & icons (also imported in app.css, preconnect speeds them up) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <!-- Brython 3.14 — <brython-options> replaces body onload -->
+  <script src="https://cdn.jsdelivr.net/npm/brython@3.14/brython.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/brython@3.14/brython_stdlib.js"></script>
+  <brython-options debug="0" pythonpath="[[=URL('static','py')]]"></brython-options>
+
+  <!-- Handlebars -->
+  <script src="https://cdn.jsdelivr.net/npm/handlebars@4/dist/handlebars.min.js"></script>
+
+  <link rel="stylesheet" href="[[=URL('static','css/app.css')]]" />
+</head>
+<body>
+
+<!-- ── Top nav ───────────────────────────────────────────────────────────── -->
+<header class="site-header">
+  <div class="header-inner">
+    <span class="logo">Certified Small Engine</span>
+    <nav class="main-nav">
+      <a href="#/" data-nav="/">Dashboard</a>
+      <a href="#/customers" data-nav="/customers">Customers</a>
+      <a href="#/workorders" data-nav="/workorders">Work Orders</a>
+      <a href="#/warranty" data-nav="/warranty">Warranty</a>
+      [[if is_admin:]]
+      <div class="nav-dropdown" data-nav="/parts">
+        <a href="#/parts" class="nav-dropdown-toggle">Parts ▾</a>
+        <div class="nav-dropdown-menu">
+          <a href="#/parts" data-nav="/parts">Inventory</a>
+          <a href="#/suppliers" data-nav="/suppliers">Suppliers</a>
+          <a href="#/purchasing" data-nav="/purchasing">Purchasing</a>
+        </div>
+      </div>
+      [[else:]]
+      <a href="#/parts" data-nav="/parts">Parts</a>
+      [[pass]]
+      <a href="#/sales" data-nav="/sales">Sales</a>
+      <div class="nav-dropdown" data-nav="/reports">
+        <a href="#/reports" class="nav-dropdown-toggle">Reports ▾</a>
+        <div class="nav-dropdown-menu">
+          <a href="#/reports/revenue" data-nav="/reports/revenue">Revenue by Month</a>
+          <a href="#/reports/technicians" data-nav="/reports/technicians">Tech Productivity</a>
+          <a href="#/reports/warranty" data-nav="/reports/warranty">Warranty Recoveries</a>
+          <a href="#/reports/inventory" data-nav="/reports/inventory">Inventory Value</a>
+        </div>
+      </div>
+      [[if role in ('receptionist', 'admin'):]]
+      <a href="#/reception" data-nav="/reception">Reception</a>
+      [[pass]]
+      [[if is_admin:]]
+      <a href="#/settings" data-nav="/settings">Settings</a>
+      [[pass]]
+    </nav>
+    <div class="nav-user-area">
+      <span class="nav-user">[[=user.get('first_name','')]] [[=user.get('last_name','')]]</span>
+      <a href="[[=URL('auth','logout')]]" class="btn-logout btn">Logout</a>
+    </div>
+  </div>
+</header>
+
+<!-- ── App config injected by server ────────────────────────────────────── -->
+<script>window.APP_IS_ADMIN = [[=1 if is_admin else 0]];</script>
+
+<!-- ── Flash / toast ─────────────────────────────────────────────────────── -->
+<div id="toast" class="toast hidden"></div>
+
+<!-- ── Main content — Brython renders Mustache templates here ────────────── -->
+<main id="content" class="main-content">
+  <p class="loading">Loading…</p>
+</main>
+
+<!-- ── Handlebars page templates ─────────────────────────────────────────── -->
+[[include 'partials/tpl_dashboard.html']]
+[[include 'partials/tpl_customers.html']]
+[[include 'partials/tpl_work_orders.html']]
+[[include 'partials/tpl_parts.html']]
+[[include 'partials/tpl_suppliers.html']]
+[[include 'partials/tpl_purchasing.html']]
+[[include 'partials/tpl_settings.html']]
+[[include 'partials/tpl_retail.html']]
+[[include 'partials/tpl_warranty.html']]
+[[include 'partials/tpl_reports.html']]
+
+<!-- Current user injected for Brython (avoids a round-trip to /api/me) -->
+<script>
+  window.__shop_user = {
+    id: [[=user.get('id', 0)]],
+    email: "[[=user.get('email','')]]",
+    first_name: "[[=user.get('first_name','')]]",
+    last_name: "[[=user.get('last_name','')]]",
+    role: "[[=role]]",
+    is_admin: [[='true' if is_admin else 'false']]
+  };
+</script>
+
+<!-- ── Customers page API worker ──────────────────────────────────────────── -->
+<script type="text/python" class="webworker" id="cust-api-worker">
+from browser import bind, self, ajax
+import json
+
+@bind(self, "message")
+def on_message(ev):
+    req_id = ev.data["req_id"]
+    url = ev.data["url"]
+    req = ajax.ajax()
+    req.open("GET", url, False)
+    req.set_header("X-Requested-With", "XMLHttpRequest")
+    req.send("")
+    if 200 <= req.status < 300:
+        try:
+            payload = json.dumps(json.loads(req.text))
+        except Exception:
+            payload = "{}"
+        self.send({"req_id": req_id, "json": payload})
+    else:
+        self.send({"req_id": req_id, "error": f"HTTP {req.status}"})
+</script>
+
+<!-- Brython app entry point -->
+<script type="text/python" src="[[=URL('static','py/app.py')]]"></script>
+
+</body>
+</html>

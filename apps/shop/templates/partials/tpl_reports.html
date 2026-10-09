@@ -1,0 +1,339 @@
+<!-- ── Reports layout ────────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-reports">
+<section class="page">
+  <div class="page-header">
+    <h1>Reports &amp; Analytics</h1>
+  </div>
+
+  <!-- Reports selector buttons -->
+  <div class="quick-links" style="margin-bottom: 1.5rem;">
+    <button class="btn btn-sm {{#if (eq active_report 'revenue')}}btn-primary{{else}}btn-ghost{{/if}}" id="btn-rep-revenue">Revenue by Month</button>
+    <button class="btn btn-sm {{#if (eq active_report 'technicians')}}btn-primary{{else}}btn-ghost{{/if}}" id="btn-rep-techs">Tech Productivity</button>
+    <button class="btn btn-sm {{#if (eq active_report 'warranty')}}btn-primary{{else}}btn-ghost{{/if}}" id="btn-rep-warranty">Warranty Recoveries</button>
+    <button class="btn btn-sm {{#if (eq active_report 'inventory')}}btn-primary{{else}}btn-ghost{{/if}}" id="btn-rep-inventory">Inventory Value</button>
+  </div>
+
+  <!-- ── Report 1: Revenue by Month (GAAP Gross Profit & Margin format) ── -->
+  {{#if (eq active_report 'revenue')}}
+  <div class="bench-card">
+    <h3>Monthly Financial Performance — GAAP Format</h3>
+    <p class="muted" style="margin-bottom:1rem;">Summarizes earned revenue matched against Cost of Goods Sold (COGS). <small class="text-success">Click a row to drill down.</small></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th class="num">Total Revenue</th>
+          <th class="num">Cost of Goods Sold (COGS)</th>
+          <th class="num">Gross Profit</th>
+          <th class="num">Gross Margin</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each revenue}}
+        <tr class="drillable-row btn-drill-revenue" data-month="{{month}}" style="cursor:pointer;">
+          <td><strong>{{month}}</strong></td>
+          <td class="num" style="font-weight:bold;color:var(--primary);">${{total_revenue}}</td>
+          <td class="num" style="color:#b91c1c;">${{cogs}}</td>
+          <td class="num" style="color:#047857;font-weight:600;">${{gross_profit}}</td>
+          <td class="num" style="font-weight:bold;">{{gross_margin}}%</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="empty">No revenue history recorded.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  <!-- ── Report 2: Tech Productivity ── -->
+  {{#if (eq active_report 'technicians')}}
+  <div class="bench-card">
+    <h3>Technician Performance Analysis</h3>
+    <p class="muted" style="margin-bottom:1rem;">Shows labor metrics gathered from completed work orders. <small class="text-success">Click a row to drill down.</small></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Technician</th>
+          <th class="num">Jobs Completed</th>
+          <th class="num">Total Billed Hours</th>
+          <th class="num">Total Labor Value</th>
+          <th class="num">Avg. Hours / Job</th>
+          <th class="num">Avg. Labor / Job</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each technicians}}
+        <tr class="drillable-row btn-drill-tech" data-tech-id="{{id}}" data-tech-name="{{name}}" style="cursor:pointer;">
+          <td><strong>{{name}}</strong></td>
+          <td class="num">{{completed}}</td>
+          <td class="num">{{hours}} hrs</td>
+          <td class="num" style="color:#065f46;font-weight:600;">${{revenue}}</td>
+          <td class="num">{{avg_hours}} hrs</td>
+          <td class="num">${{avg_revenue}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="6" class="empty">No productivity metrics on file.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  <!-- ── Report 3: Warranty Recoveries ── -->
+  {{#if (eq active_report 'warranty')}}
+  <div class="bench-card">
+    <h3>Manufacturer Warranty Reimbursements</h3>
+    <p class="muted" style="margin-bottom:1rem;">Tracks claim submission counts and payment recovery ratios. <small class="text-success">Click a row to drill down.</small></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Manufacturer</th>
+          <th class="num">Claims Submitted</th>
+          <th class="num">Claims Paid</th>
+          <th class="num">Total Value Submitted</th>
+          <th class="num">Total Reimbursed</th>
+          <th class="num">Recovery Ratio</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each warranty}}
+        <tr class="drillable-row btn-drill-warranty" data-mfr-id="{{id}}" data-mfr-name="{{name}}" style="cursor:pointer;">
+          <td><strong>{{name}}</strong></td>
+          <td class="num">{{submitted_count}}</td>
+          <td class="num">{{paid_count}}</td>
+          <td class="num">${{total_submitted}}</td>
+          <td class="num" style="color:#065f46;font-weight:600;">${{total_paid}}</td>
+          <td class="num" style="font-weight:bold;">{{recovery_ratio}}%</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="6" class="empty">No warranty claim metrics found.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  <!-- ── Report 4: Inventory Value ── -->
+  {{#if (eq active_report 'inventory')}}
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start">
+    <div class="bench-card">
+      <h3>Stock Asset Valuation by Compatibility Category</h3>
+      <p class="muted" style="margin-bottom:1.25rem;">Reflects all currently active catalog parts grouped by compatible equipment categories. <small class="text-success">Click a category row to drill down.</small></p>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Compatible Category</th>
+            <th class="num">Unique Parts</th>
+            <th class="num">Stock Qty</th>
+            <th class="num">Wholesale Value</th>
+            <th class="num">Retail Value</th>
+            <th class="num">Potential Margin</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each inventory.categories}}
+          <tr class="drillable-row btn-drill-inventory" data-cat-val="{{category_val}}" data-cat-label="{{category}}" style="cursor:pointer;">
+            <td><strong>{{category}}</strong></td>
+            <td class="num">{{count}}</td>
+            <td class="num">{{qty}}</td>
+            <td class="num">${{cost}}</td>
+            <td class="num">${{price}}</td>
+            <td class="num" style="color:#065f46;font-weight:600;">${{margin}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <div class="bench-card" style="border-top:3px solid var(--primary)">
+        <h3>Global Valuation</h3>
+        <table class="lines-table" style="box-shadow:none; font-size:.875rem;">
+          <tbody>
+            <tr>
+              <td>Unique Catalog Parts</td>
+              <td class="num">{{inventory.total_items}}</td>
+            </tr>
+            <tr>
+              <td>Total Qty on Hand</td>
+              <td class="num">{{inventory.total_qty}}</td>
+            </tr>
+            <tr>
+              <td>Wholesale Asset Cost</td>
+              <td class="num" style="font-weight:bold;">${{inventory.total_cost_value_fmt}}</td>
+            </tr>
+            <tr>
+              <td>Retail Asset Value</td>
+              <td class="num" style="font-weight:bold;">${{inventory.total_retail_value_fmt}}</td>
+            </tr>
+            <tr style="border-top:2px solid var(--border-color);font-weight:bold;color:#065f46;background:#f0fdf4">
+              <td>Potential Margin</td>
+              <td class="num">${{inventory.potential_margin_fmt}}</td>
+            </tr>
+            <tr>
+              <td>Average Markup</td>
+              <td class="num" style="color:#065f46;font-weight:bold;">{{inventory.markup_pct}}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {{/if}}
+</section>
+</script>
+
+<!-- ── DRILL DOWN TEMPLATES ─────────────────────────────────────────────────── -->
+
+<!-- 1. Revenue Detail Modal -->
+<script type="text/x-handlebars-template" id="tpl-drill-revenue">
+<div style="padding-bottom:1rem">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Reference</th>
+        <th>Description</th>
+        <th class="num">Revenue</th>
+        <th class="num">COGS</th>
+        <th class="num" style="font-weight:bold;color:#047857;">Gross Profit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each details}}
+      <tr>
+        <td>{{date}}</td>
+        <td>{{type}}</td>
+        <td>{{description}}</td>
+        <td class="num">${{revenue}}</td>
+        <td class="num" style="color:#b91c1c;">${{cogs}}</td>
+        <td class="num" style="font-weight:bold;color:#047857;">${{gross_profit}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="6" class="empty">No transactions found for this month.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-close-drill">Close</button>
+  </div>
+</div>
+</script>
+
+<!-- 2. Tech Performance Detail Modal -->
+<script type="text/x-handlebars-template" id="tpl-drill-tech">
+<div style="padding-bottom:1rem">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th>Completed</th>
+        <th>WO #</th>
+        <th>Customer</th>
+        <th>Equipment</th>
+        <th>Reported Problem</th>
+        <th class="num">Labor Hours</th>
+        <th class="num">Labor Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each details}}
+      <tr>
+        <td>{{date}}</td>
+        <td><a href="#/workorders/{{id}}" onclick="app.close_modal()">#{{id}}</a></td>
+        <td>{{customer_name}}</td>
+        <td>{{equip_desc}}</td>
+        <td><span class="notes">{{problem}}</span></td>
+        <td class="num">{{hours}} hrs</td>
+        <td class="num" style="font-weight:bold;color:#065f46;">${{revenue}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="7" class="empty">No completed jobs on file for this technician.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-close-drill">Close</button>
+  </div>
+</div>
+</script>
+
+<!-- 3. Warranty Claim Detail Modal -->
+<script type="text/x-handlebars-template" id="tpl-drill-warranty">
+<div style="padding-bottom:1rem">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th>Submitted</th>
+        <th>Mfr Claim #</th>
+        <th>WO #</th>
+        <th>Customer</th>
+        <th>Equipment</th>
+        <th>Claimed</th>
+        <th>Status</th>
+        <th>Reimbursed</th>
+        <th>Paid Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each details}}
+      <tr>
+        <td>{{submitted_date}}</td>
+        <td><strong>{{mfr_claim_number}}</strong></td>
+        <td><a href="#/workorders/{{work_order_id}}" onclick="app.close_modal()">#{{work_order_id}}</a></td>
+        <td>{{customer_name}}</td>
+        <td>{{equip_desc}}</td>
+        <td>${{total_claimed}}</td>
+        <td><span class="badge badge-{{status}}">{{status}}</span></td>
+        <td>{{#if reimbursement_amount}}${{reimbursement_amount}}{{else}}—{{/if}}</td>
+        <td>{{#if payment_date}}{{payment_date}}{{else}}—{{/if}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="9" class="empty">No claims submitted to this manufacturer.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-close-drill">Close</button>
+  </div>
+</div>
+</script>
+
+<!-- 4. Inventory Category Detail Modal -->
+<script type="text/x-handlebars-template" id="tpl-drill-inventory">
+<div style="padding-bottom:1rem">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th>Part #</th>
+        <th>Description</th>
+        <th class="num">Qty</th>
+        <th class="num">Unit Cost</th>
+        <th class="num">Unit Price</th>
+        <th class="num">Total Cost</th>
+        <th class="num">Total Price</th>
+        <th class="num" style="font-weight:bold;color:#065f46;">Margin</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each parts}}
+      <tr>
+        <td><strong>{{part_number}}</strong></td>
+        <td>{{description}}</td>
+        <td class="num">{{qty_on_hand}}</td>
+        <td class="num">${{cost}}</td>
+        <td class="num">${{price}}</td>
+        <td class="num">${{total_cost_val}}</td>
+        <td class="num">${{total_price_val}}</td>
+        <td class="num" style="font-weight:bold;color:#065f46;">${{margin}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="8" class="empty">No parts categorized in this category.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-close-drill">Close</button>
+  </div>
+</div>
+</script>

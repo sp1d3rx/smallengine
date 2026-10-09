@@ -1,0 +1,134 @@
+<!-- ── Dashboard ────────────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-dashboard">
+<section class="page">
+  <h1>Good morning</h1>
+
+  {{#if is_receptionist_or_admin}}
+  <div class="quick-links">
+    <a href="#/reception" class="quick-link">Reception Queue</a>
+    <a href="#/workorders/new" class="quick-link">+ New Intake</a>
+    <a href="#/customers" class="quick-link">Customers</a>
+    <a href="#/retail/new" class="quick-link">+ Retail Sale</a>
+  </div>
+  {{else}}
+  <div class="quick-links">
+    <a href="#/workorders/new" class="quick-link">+ New Intake</a>
+    <a href="#/workorders" class="quick-link">My Queue</a>
+    <a href="#/customers" class="quick-link">Customers</a>
+    <a href="#/retail/new" class="quick-link">+ Retail Sale</a>
+  </div>
+  {{/if}}
+
+  <div class="stat-grid">
+    {{#each status_counts}}
+    <a href="#/workorders" class="stat-card stat-{{status}}">
+      <span class="stat-label">{{label}}</span>
+      <span class="stat-value">{{count}}</span>
+    </a>
+    {{/each}}
+  </div>
+
+  {{#if unnotified}}
+  <h2>Ready — Customer Not Yet Notified ({{unnotified_count}})</h2>
+  <table>
+    <thead><tr><th>#</th><th>Customer</th><th>Contact</th><th>Equipment</th></tr></thead>
+    <tbody>
+      {{#each unnotified}}
+      <tr>
+        <td><a href="#/workorders/{{id}}">#{{id}}</a></td>
+        <td>{{customer_name}}</td>
+        <td>{{contact_info}}</td>
+        <td>{{equip_desc}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+  {{/if}}
+
+  {{#if awaiting_pickup}}
+  <h2>Closed — Awaiting Pickup ({{awaiting_pickup_count}})</h2>
+  <table>
+    <thead><tr><th>#</th><th>Customer</th><th>Equipment</th><th>Days Waiting</th></tr></thead>
+    <tbody>
+      {{#each awaiting_pickup}}
+      <tr>
+        <td><a href="#/workorders/{{id}}">#{{id}}</a></td>
+        <td>{{customer_name}}</td>
+        <td>{{equip_desc}}</td>
+        <td class="{{#if overdue_pickup}}overdue{{/if}}">{{days_waiting}}d{{#if overdue_pickup}} ⚠{{/if}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+  {{/if}}
+
+  <h2>Overdue / Past Promise Date</h2>
+  <table>
+    <thead><tr><th>#</th><th>Customer</th><th>Equipment</th><th>Promised</th><th>Status</th></tr></thead>
+    <tbody>
+      {{#each overdue}}
+      <tr>
+        <td><a href="#/workorders/{{id}}">#{{id}}</a></td>
+        <td>{{customer_name}}</td>
+        <td>{{equip_desc}}</td>
+        <td class="overdue">{{date_promised}}</td>
+        <td><span class="badge badge-{{status}}">{{status_label}}</span></td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5" class="empty">All caught up!</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <h2>Low Stock Parts</h2>
+  {{#if low_stock}}
+  <ul>
+    {{#each low_stock}}
+    <li><a href="#/parts/{{id}}">{{part_number}}</a> — {{description}} ({{qty_on_hand}} on hand)</li>
+    {{/each}}
+  </ul>
+  {{else}}
+  <p class="empty">All parts adequately stocked.</p>
+  {{/if}}
+</section>
+</script>
+
+<!-- ── Reception queue ──────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-reception">
+<section class="page">
+  <div class="page-header">
+    <h1>Reception Queue</h1>
+    <span class="muted">{{today}}</span>
+  </div>
+
+  {{#if sections}}
+  {{#each sections}}
+  <div class="reception-section">
+    <h2 class="section-label-{{cls}}">{{title}} ({{count}})</h2>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Customer</th><th>Contact</th><th>Equipment</th>
+        <th>Status</th><th>Promised</th><th>Pickup</th><th></th>
+      </tr></thead>
+      <tbody>
+        {{#each items}}
+        <tr>
+          <td><a href="#/workorders/{{id}}">#{{id}}</a></td>
+          <td>{{customer_name}}</td>
+          <td>{{contact_info}}</td>
+          <td>{{equip_desc}}</td>
+          <td><span class="badge badge-{{status}}">{{status_label}}</span></td>
+          <td>{{promised}}</td>
+          <td>{{pickup}}</td>
+          <td><a href="#/workorders/{{id}}" class="btn btn-primary btn-sm">Open</a></td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/each}}
+  {{else}}
+  <p class="empty">Nothing requires attention right now.</p>
+  {{/if}}
+</section>
+</script>

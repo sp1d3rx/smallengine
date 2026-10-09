@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Initial Setup — Certified Small Engine</title>
+  <link rel="stylesheet" href="[[=URL('static','css/app.css')]]" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--color-navy); }
+    .setup-card {
+      background:var(--color-white);
+      border-radius:10px;
+      padding:2.5rem 2rem;
+      width:100%;
+      max-width:420px;
+      box-shadow:0 8px 32px rgba(0,0,0,.35);
+    }
+    .setup-logo { text-align:center; margin-bottom:1.5rem; }
+    .setup-logo span { font-size:1.3rem; font-weight:800; color:var(--color-navy); }
+    .setup-logo span em { color:var(--color-orange); font-style:normal; }
+    h1 { font-size:1.1rem; color:var(--color-navy); margin-bottom:.25rem; }
+    p.sub { font-size:.85rem; color:var(--color-gray-400); margin-bottom:1.5rem; }
+    .error-msg { color:#dc2626; font-size:.78rem; margin-top:.2rem; }
+    .btn { width:100%; padding:.6rem; margin-top:.5rem; font-size:1rem; }
+  </style>
+</head>
+<body>
+<div class="setup-card">
+  <div class="setup-logo">
+    <span>Certified <em>Small Engine</em></span>
+  </div>
+  <h1>Welcome — Let's get you set up</h1>
+  <p class="sub">No accounts exist yet. Create your admin account to get started.</p>
+
+  <form method="POST" action="[[=URL('setup')]]">
+    <div class="field">
+      <label>First Name</label>
+      <input type="text" name="first_name" value="[[=request.forms.get('first_name','')]]" autofocus required />
+      [[if errors.get('first_name'):]]
+        <div class="error-msg">[[=errors['first_name']]]</div>
+      [[pass]]
+    </div>
+    <div class="field">
+      <label>Last Name</label>
+      <input type="text" name="last_name" value="[[=request.forms.get('last_name','')]]" required />
+      [[if errors.get('last_name'):]]
+        <div class="error-msg">[[=errors['last_name']]]</div>
+      [[pass]]
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" name="email" value="[[=request.forms.get('email','')]]" required />
+      [[if errors.get('email'):]]
+        <div class="error-msg">[[=errors['email']]]</div>
+      [[pass]]
+    </div>
+    <div class="field">
+      <label>Password <small style="font-weight:400;color:var(--color-gray-400)">(min 8 characters)</small></label>
+      <input type="password" name="password" required />
+      [[if errors.get('password'):]]
+        <div class="error-msg">[[=errors['password']]]</div>
+      [[pass]]
+    </div>
+    <div class="field">
+      <label>Confirm Password</label>
+      <input type="password" name="confirm" required />
+      [[if errors.get('confirm'):]]
+        <div class="error-msg">[[=errors['confirm']]]</div>
+      [[pass]]
+    </div>
+    <button type="submit" class="btn btn-primary">Create Admin Account</button>
+  </form>
+</div>
+</body>
+</html>

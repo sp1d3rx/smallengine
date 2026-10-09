@@ -1,0 +1,27 @@
+# py4web / pydal
+apps/shop/databases/
+apps/shop/errors/
+apps/*/private/
+apps/.service/
+*.pyc
+__pycache__/
+*.pyo
+
+# Python
+.venv/
+venv/
+.env
+
+# Logs & error dumps
+*.log
+*.error
+
+# OS
+.DS_Store
+
+# Local agent / tooling state
+.claude/
+memory/
+
+# Edit backups
+*.bak

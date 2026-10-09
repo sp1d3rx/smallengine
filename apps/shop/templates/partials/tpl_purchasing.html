@@ -1,0 +1,261 @@
+<!-- ── Purchase orders list ─────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-purchasing-list">
+<section class="page">
+  <div class="page-header">
+    <h1>Purchase Orders</h1>
+    <a href="#/purchasing/new" class="btn btn-primary">+ New PO</a>
+  </div>
+  <table>
+    <thead><tr>
+      <th>PO #</th><th>Supplier</th><th>Ordered</th>
+      <th>Expected</th><th>Status</th><th class="num">Total</th>
+    </tr></thead>
+    <tbody>
+      {{#each pos}}
+      <tr>
+        <td><a href="#/purchasing/{{id}}">{{po_number}}</a></td>
+        <td>{{supplier_name}}</td>
+        <td>{{ordered_on}}</td>
+        <td>{{expected_by}}</td>
+        <td><span class="badge badge-neutral badge-sm">{{status_label}}</span></td>
+        <td class="num">{{total_fmt}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="6" style="text-align:center;color:var(--color-gray-400)">No purchase orders yet.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+</script>
+
+<!-- ── Purchase order detail ────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-purchasing-detail">
+<section class="page">
+  <div class="page-header">
+    <div>
+      <a href="#/purchasing" class="btn btn-ghost btn-sm">&larr; Purchase Orders</a>
+      <h1 style="margin-top:.5rem">{{po_number}}
+        <span class="badge badge-neutral">{{status_label}}</span>
+      </h1>
+    </div>
+    <div style="display:flex;gap:.5rem;align-items:center">
+      {{#if (eq status "draft")}}
+      <button class="btn btn-secondary" id="btn-mark-sent">Mark as Sent</button>
+      <button class="btn btn-danger btn-sm" id="btn-cancel-po" style="margin-left:.5rem">Cancel PO</button>
+      {{/if}}
+      {{#if (eq status "sent")}}
+      <button class="btn btn-primary" id="btn-receive">Receive Selected</button>
+      <button class="btn btn-danger btn-sm" id="btn-cancel-po" style="margin-left:.5rem">Cancel PO</button>
+      {{/if}}
+      {{#if (eq status "partial")}}
+      <button class="btn btn-primary" id="btn-receive">Receive More</button>
+      {{/if}}
+    </div>
+  </div>
+
+  <div class="bench-card" style="margin-bottom:1.5rem">
+    <h3>Lines
+      {{#if is_draft}}<button class="btn btn-ghost btn-sm" id="btn-add-line" style="margin-left:.5rem">+ Add</button>{{/if}}
+    </h3>
+    <table>
+      <thead><tr>
+        <th>Description</th>
+        <th class="num">Ordered</th>
+        <th class="num">Unit Cost</th>
+        <th class="num">Total</th>
+        <th class="num">Received</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {{#each lines}}
+        <tr>
+          <td>{{display}}</td>
+          <td class="num">{{qty_ordered}}</td>
+          <td class="num">{{unit_cost_fmt}}</td>
+          <td class="num">{{total_cost_fmt}}</td>
+          <td class="num">{{qty_received}}</td>
+          <td>
+            {{#if is_draft}}
+            <button class="btn btn-danger btn-xs del-line-btn" data-line-id="{{line_id}}">✕</button>
+            {{/if}}
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="6" style="text-align:center;color:var(--color-gray-400)">No lines yet.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+    <div style="text-align:right;margin-top:.5rem">
+      <strong>Total: {{total_fmt}}</strong>
+    </div>
+    <div id="add-line-form"></div>
+  </div>
+
+  <div class="bench-card" style="max-width:480px">
+    <h3>Order Info <button class="btn btn-ghost btn-sm" id="btn-edit-po" style="margin-left:.5rem">Edit</button></h3>
+    <dl class="detail-list">
+      <dt>Supplier</dt>
+      <dd><a href="#/suppliers/{{supplier_id}}">{{supplier_name}}</a></dd>
+      <dt>Contact</dt><dd>{{contact_str}}</dd>
+      <dt>Ordered</dt><dd>{{ordered_on}}</dd>
+      <dt>Expected</dt><dd>{{expected_by}}</dd>
+      <dt>Shipping</dt><dd>{{shipping_label}}</dd>
+      <dt>Tracking</dt><dd id="tracking-display">{{tracking}}</dd>
+      <dt>Notes</dt><dd>{{notes}}</dd>
+    </dl>
+  </div>
+</section>
+</script>
+
+<!-- ── New purchase order form ──────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-purchasing-new">
+<section class="page">
+  <div class="page-header">
+    <h1>New Purchase Order</h1>
+    <a href="#/purchasing" class="btn btn-ghost">Cancel</a>
+  </div>
+
+  <div class="bench-layout">
+    <div class="bench-left">
+      <div class="bench-card">
+        <h3>Line Items</h3>
+        <div id="po-lines-container"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-add-another-line">+ Add Another Line</button>
+        <div style="margin-top:.75rem;font-size:.9rem;color:var(--color-gray-500)">
+          Total: <strong id="po-total-display">$0.00</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="bench-right">
+      <div class="bench-card">
+        <h3>Order Details</h3>
+        <div class="form-grid-1">
+          <div class="field"><label>Supplier *</label>
+            <select name="supplier_id" id="po-supplier-sel">
+              <option value="">— Select supplier —</option>
+              {{#each suppliers}}
+              <option value="{{id}}"{{#if is_selected}} selected{{/if}}>{{name}}</option>
+              {{/each}}
+            </select></div>
+          <div class="field"><label>Shipping Method</label>
+            <select name="shipping_method" id="po-shipping">
+              {{#each shipping_methods}}
+              <option value="{{value}}">{{label}}</option>
+              {{/each}}
+            </select></div>
+          <div class="field"><label>Expected By</label>
+            <input type="date" name="expected_by" id="po-expected" /></div>
+          <div class="field"><label>Notes</label>
+            <textarea name="notes" id="po-notes" rows="2"></textarea></div>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-create-po"
+                style="margin-top:1rem;width:100%">Create PO (Draft)</button>
+      </div>
+    </div>
+  </div>
+</section>
+</script>
+
+<!-- ── PO line group (new PO form) ──────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-po-line-group">
+<div class="po-line-group" style="border:1px solid var(--color-gray-100);border-radius:var(--radius);padding:.75rem;margin-bottom:.5rem">
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:.4rem">
+    <div class="field" style="margin:0"><label style="font-size:.75rem">Part (catalog)</label>
+      <select class="line-part-sel">
+        <option value="">— Ad-hoc —</option>
+        {{#each parts}}
+        <option value="{{id}}" data-cost="{{cost}}"{{#if is_selected}} selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select></div>
+    <div class="field" style="margin:0"><label style="font-size:.75rem">Qty</label>
+      <input type="number" class="line-qty" min="1" value="{{qty}}" /></div>
+    <div class="field" style="margin:0"><label style="font-size:.75rem">Unit Cost ($)</label>
+      <input type="number" class="line-cost" step="0.01" min="0" value="{{cost_val}}" /></div>
+    <button type="button" class="btn btn-danger btn-xs remove-line-btn"
+            style="margin-top:1.4rem">✕</button>
+  </div>
+  <div class="field" style="margin:0"><label style="font-size:.75rem">Description *</label>
+    <input type="text" class="line-desc" required
+           placeholder="Part name / number to appear on PO" value="{{desc}}" /></div>
+</div>
+</script>
+
+<!-- ── Add line to existing PO (inline form) ────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-po-add-line-form">
+<form id="form-add-line" class="inline-form" style="margin-top:.75rem">
+  <div class="form-grid-3">
+    <div class="field" style="grid-column:1/-1"><label>Part (optional — pick from catalog)</label>
+      <select name="part_id" id="line-part-select">
+        <option value="">— Ad-hoc (no part record) —</option>
+        {{#each parts}}
+        <option value="{{id}}" data-cost="{{cost}}">{{label}}</option>
+        {{/each}}
+      </select></div>
+    <div class="field" style="grid-column:1/-1"><label>Description *</label>
+      <input type="text" name="description" required
+             placeholder="Overrides part description if filled" /></div>
+    <div class="field"><label>Qty *</label>
+      <input type="number" name="qty_ordered" min="1" value="1" required /></div>
+    <div class="field"><label>Unit Cost ($)</label>
+      <input type="number" name="unit_cost" step="0.01" min="0" value="0"
+             id="line-cost-input" /></div>
+  </div>
+  <button type="submit" class="btn btn-primary btn-sm">Add Line</button>
+  <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-line">Cancel</button>
+</form>
+</script>
+
+<!-- ── Edit PO info (inline form) ───────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-po-edit-form">
+<h3>Edit Order Info</h3>
+<form id="form-edit-po">
+  <div class="form-grid-1">
+    <div class="field"><label>Shipping Method</label>
+      <select name="shipping_method">
+        {{#each shipping_methods}}
+        <option value="{{value}}"{{#if is_selected}} selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select></div>
+    <div class="field"><label>Tracking Number</label>
+      <input type="text" name="tracking_number" value="{{tracking}}"
+             placeholder="UPS/FedEx tracking #…" /></div>
+    <div class="field"><label>Expected By</label>
+      <input type="date" name="expected_by" value="{{expected}}" /></div>
+    <div class="field"><label>Notes</label>
+      <textarea name="notes" rows="2">{{notes}}</textarea></div>
+  </div>
+  <button type="submit" class="btn btn-primary btn-sm">Save</button>
+  <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-edit-po">Cancel</button>
+</form>
+</script>
+
+<!-- ── Receive items modal ───────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-po-receive-form">
+<form id="form-receive">
+  <table>
+    <thead><tr>
+      <th>Description</th>
+      <th class="num">Remaining</th>
+      <th class="num">Receive Now</th>
+    </tr></thead>
+    <tbody>
+      {{#each lines}}
+      <tr>
+        <td>{{display}}</td>
+        <td class="num">{{remaining}}</td>
+        <td class="num">
+          <input type="number" class="recv-input input" min="0" max="{{remaining}}"
+                 value="{{remaining}}" data-line-id="{{line_id}}"
+                 style="width:70px" />
+        </td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-cancel-receive">Cancel</button>
+    <button type="submit" class="btn btn-primary">Confirm Receipt</button>
+  </div>
+</form>
+</script>

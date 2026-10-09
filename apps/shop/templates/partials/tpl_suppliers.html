@@ -1,0 +1,175 @@
+<!-- ── Suppliers list ───────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-suppliers-list">
+<section class="page">
+  <div class="page-header">
+    <h1>Suppliers</h1>
+    <button class="btn btn-primary" id="btn-new-supplier">+ Add Supplier</button>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Name</th><th>Phone</th><th>Primary Contact</th>
+      <th>Terms</th><th>Account #</th>
+    </tr></thead>
+    <tbody>
+      {{#each suppliers}}
+      <tr>
+        <td><a href="#/suppliers/{{id}}">{{name}}</a></td>
+        <td>{{phone_display}}</td>
+        <td>{{contact_str}}</td>
+        <td>{{terms_label}}</td>
+        <td>{{account_number}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5" style="text-align:center;color:var(--color-gray-400)">No suppliers yet.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+</script>
+
+<!-- ── Supplier detail ──────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-suppliers-detail">
+<section class="page">
+  <div class="page-header">
+    <div>
+      <a href="#/suppliers" class="btn btn-ghost btn-sm">&larr; Suppliers</a>
+      <h1 style="margin-top:.5rem">{{name}}</h1>
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <a href="#/purchasing/new?supplier_id={{supplier_id}}" class="btn btn-secondary">New PO</a>
+      <button class="btn btn-ghost" id="btn-edit-supplier">Edit</button>
+    </div>
+  </div>
+
+  <div class="bench-layout">
+    <div class="bench-left">
+
+      <div class="bench-card">
+        <h3>Contacts
+          <button class="btn btn-ghost btn-sm" id="btn-add-contact" style="margin-left:.5rem">+ Add</button>
+        </h3>
+        <div id="contacts-list">
+          {{#each contacts}}
+          <div class="contact-row" style="display:flex;justify-content:space-between;align-items:start;padding:.5rem 0;border-bottom:1px solid var(--color-gray-100)">
+            <div>
+              <strong>{{name}}</strong> {{#if is_primary}}<span class="badge badge-neutral badge-sm">Primary</span>{{/if}}
+              {{#if title}}<span class="muted"> — {{title}}</span>{{/if}}
+              <br>
+              {{#if phone}}<span>{{phone}}</span>{{/if}}
+              {{#if has_phone_and_email}} · {{/if}}
+              {{#if email}}<span>{{email}}</span>{{/if}}
+            </div>
+            <div style="display:flex;gap:.4rem">
+              <button class="btn btn-ghost btn-xs edit-contact-btn" data-contact-id="{{id}}">Edit</button>
+              <button class="btn btn-danger btn-xs del-contact-btn" data-contact-id="{{id}}">✕</button>
+            </div>
+          </div>
+          {{else}}
+          <p class="muted empty">No contacts yet.</p>
+          {{/each}}
+        </div>
+        <div id="contact-form"></div>
+      </div>
+
+      <div class="bench-card">
+        <h3>Purchase Orders</h3>
+        <table>
+          <thead><tr><th>PO #</th><th>Ordered</th><th>Status</th><th class="num">Total</th></tr></thead>
+          <tbody>
+            {{#each pos}}
+            <tr>
+              <td><a href="#/purchasing/{{id}}">{{po_number}}</a></td>
+              <td>{{ordered_on}}</td>
+              <td><span class="badge badge-neutral badge-sm">{{status}}</span></td>
+              <td class="num">{{total_fmt}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="4" style="text-align:center;color:var(--color-gray-400)">No purchase orders yet.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+    <div class="bench-right">
+
+      <div class="bench-card">
+        <h3>Info</h3>
+        <dl class="detail-list">
+          <dt>Phone</dt><dd>{{phone_display}}</dd>
+          <dt>Email</dt><dd>{{email_display}}</dd>
+          <dt>Website</dt><dd>{{website_display}}</dd>
+          <dt>Account #</dt><dd>{{account_number}}</dd>
+          <dt>Terms</dt><dd>{{terms_label}}</dd>
+          <dt>Default Shipping</dt><dd>{{shipping_label}}</dd>
+          {{#if notes}}<dt>Notes</dt><dd>{{notes}}</dd>{{/if}}
+        </dl>
+      </div>
+
+    </div>
+  </div>
+</section>
+</script>
+
+<!-- ── Supplier add/edit form ───────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-suppliers-form">
+<section class="page">
+  <div class="page-header">
+    <h1>{{title}}</h1>
+    <a href="{{back_href}}" class="btn btn-ghost">Cancel</a>
+  </div>
+  <div class="bench-card" style="max-width:680px">
+    <form id="form-supplier">
+      <div class="form-grid-2">
+        <div class="field" style="grid-column:1/-1"><label>Supplier Name *</label>
+          <input type="text" name="name" required value="{{name}}"></div>
+        <div class="field"><label>Phone</label>
+          <input type="tel" name="phone" value="{{phone}}"></div>
+        <div class="field"><label>Email</label>
+          <input type="email" name="email" value="{{email}}"></div>
+        <div class="field"><label>Website</label>
+          <input type="url" name="website" placeholder="https://…" value="{{website}}"></div>
+        <div class="field"><label>Account # (our acct with them)</label>
+          <input type="text" name="account_number" value="{{account_number}}"></div>
+        <div class="field"><label>Terms</label>
+          <select name="terms">
+            {{#each terms}}
+            <option value="{{value}}"{{#if is_selected}} selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select></div>
+        <div class="field"><label>Default Shipping</label>
+          <select name="default_shipping">
+            {{#each shipping_methods}}
+            <option value="{{value}}"{{#if is_selected}} selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select></div>
+        <div class="field" style="grid-column:1/-1"><label>Notes</label>
+          <textarea name="notes" rows="2">{{notes}}</textarea></div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top:1rem">Save Supplier</button>
+    </form>
+  </div>
+</section>
+</script>
+
+<!-- ── Supplier contact add/edit form ───────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-supplier-contact-form">
+<form id="form-contact" class="inline-form" style="margin-top:.75rem">
+  <div class="form-grid-2">
+    <div class="field"><label>Name *</label>
+      <input type="text" name="name" required value="{{name}}"></div>
+    <div class="field"><label>Title</label>
+      <input type="text" name="title" placeholder="Inside Sales, Parts Dept…"
+             value="{{title}}"></div>
+    <div class="field"><label>Phone</label>
+      <input type="tel" name="phone" value="{{phone}}"></div>
+    <div class="field"><label>Email</label>
+      <input type="email" name="email" value="{{email}}"></div>
+    <div class="field" style="grid-column:1/-1">
+      <label><input type="checkbox" name="is_primary"{{#if is_primary}} checked{{/if}}> Primary contact</label>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary btn-sm">Save</button>
+  <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-contact">Cancel</button>
+</form>
+</script>

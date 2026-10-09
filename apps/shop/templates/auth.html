@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Certified Small Engine</title>
+  <link rel="stylesheet" href="[[=URL('static','css/app.css')]]" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--color-navy); }
+    .auth-card {
+      background:var(--color-white);
+      border-radius:10px;
+      padding:2.5rem 2rem;
+      width:100%;
+      max-width:380px;
+      box-shadow:0 8px 32px rgba(0,0,0,.35);
+    }
+    .auth-logo { text-align:center; margin-bottom:1.75rem; }
+    .auth-logo span { font-size:1.3rem; font-weight:800; color:var(--color-navy); }
+    .auth-logo span em { color:var(--color-orange); font-style:normal; }
+    h1 { font-size:1.1rem; color:var(--color-navy); margin-bottom:1.25rem; text-align:center; }
+    /* Style py4web's generated form elements */
+    .auth-card form .field, .auth-card form p { margin-bottom:.85rem; }
+    .auth-card form input[type=submit], .auth-card form button[type=submit] {
+      width:100%; padding:.6rem; font-size:1rem;
+      background:var(--color-orange); color:var(--color-white);
+      border:none; border-radius:var(--radius); cursor:pointer; font-weight:600;
+      margin-top:.25rem;
+    }
+    .auth-card form input[type=submit]:hover { opacity:.88; }
+    .error { color:#dc2626; font-size:.8rem; }
+    .flash { background:#fef3c7; border:1px solid #f59e0b; border-radius:var(--radius); padding:.5rem .75rem; font-size:.85rem; margin-bottom:1rem; }
+  </style>
+</head>
+<body>
+<div class="auth-card">
+  <div class="auth-logo">
+    <span>Certified <em>Small Engine</em></span>
+  </div>
+  <h1>Login</h1>
+  [[=form]]
+</div>
+</body>
+</html>

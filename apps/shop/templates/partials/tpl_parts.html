@@ -1,0 +1,218 @@
+<!-- ── Parts list ───────────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-parts-list">
+<section class="page">
+  <div class="page-header">
+    <h1>Parts Inventory</h1>
+    <button class="btn btn-primary" id="btn-new-part">+ Add Part</button>
+  </div>
+
+  <div class="tab-bar" style="margin-bottom:1rem">
+    <button class="tab{{#if all_tab_active}} active{{/if}}" id="tab-all">All Parts</button>
+    <button class="tab{{#if low_tab_active}} active{{/if}}" id="tab-low">Low Stock</button>
+  </div>
+
+  <div id="filter-banner" style="{{#if low_tab_active}}display:flex{{else}}display:none{{/if}};align-items:center;gap:.5rem;background:var(--color-amber-50,#fffbeb);border:1px solid var(--color-amber-300,#fcd34d);border-radius:var(--radius);padding:.5rem .75rem;margin-bottom:.75rem;font-size:.875rem;color:#92400e">
+    <span>&#9888;</span>
+    <span>Showing low-stock parts only — some parts are hidden.</span>
+  </div>
+
+  <div class="search-bar" style="margin-bottom:1rem">
+    <input type="text" id="parts-search" placeholder="Search part # or description…"
+           class="input" style="max-width:360px" />
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>Part #</th><th>Description</th>
+      <th class="num">On Hand</th><th class="num">Cost</th><th class="num">Price</th>
+    </tr></thead>
+    <tbody id="parts-tbody">
+      {{#each parts}}
+      <tr>
+        <td><a href="#/parts/{{id}}">{{part_number}}</a></td>
+        <td>{{description}}</td>
+        <td class="num">{{qty_on_hand}}
+          {{#if is_low}}<span class="badge badge-cancelled badge-sm">Low</span>{{/if}}</td>
+        <td class="num">{{cost_fmt}}</td>
+        <td class="num">{{price_fmt}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5" style="text-align:center;color:var(--color-gray-400)">{{empty_msg}}</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+</script>
+
+<!-- ── Parts tbody rows (search update) ─────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-parts-tbody">
+{{#each parts}}
+<tr>
+  <td><a href="#/parts/{{id}}">{{part_number}}</a></td>
+  <td>{{description}}</td>
+  <td class="num">{{qty_on_hand}}
+    {{#if is_low}}<span class="badge badge-cancelled badge-sm">Low</span>{{/if}}</td>
+  <td class="num">{{cost_fmt}}</td>
+  <td class="num">{{price_fmt}}</td>
+</tr>
+{{else}}
+<tr><td colspan="5" style="text-align:center;color:var(--color-gray-400)">{{empty_msg}}</td></tr>
+{{/each}}
+</script>
+
+<!-- ── Part detail ──────────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-parts-detail">
+<section class="page">
+  <div class="page-header">
+    <div>
+      <a href="#/parts" class="btn btn-ghost btn-sm">&larr; Parts</a>
+      <h1 style="margin-top:.5rem">{{part_number}}
+        {{#if is_low}}<span class="badge badge-cancelled" style="margin-left:.5rem">Low Stock</span>{{/if}}
+      </h1>
+      <p class="muted">{{description}}</p>
+    </div>
+    <button class="btn btn-secondary" id="btn-edit-part">Edit Part</button>
+  </div>
+
+  <div class="bench-layout">
+    <div class="bench-left">
+      <div class="bench-card">
+        <h3>Specifications</h3>
+        <dl class="detail-list">
+          <dt>Part #</dt><dd>{{part_number}}</dd>
+          <dt>Description</dt><dd>{{description}}</dd>
+          <dt>Compatible</dt><dd>{{compatible_display}}</dd>
+          <dt>Supplier</dt><dd>{{#if has_supplier}}<a href="#/suppliers/{{supplier_id}}">{{supplier_name}}</a>{{else}}—{{/if}}</dd>
+          <dt>Active</dt><dd>{{is_active_label}}</dd>
+        </dl>
+      </div>
+
+      <div class="bench-card">
+        <h3>Pricing &amp; Margins</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div>
+            <div class="muted" style="font-size:.75rem">Unit Cost</div>
+            <div style="font-weight:700;font-size:1.15rem">{{cost_fmt}}</div>
+          </div>
+          <div>
+            <div class="muted" style="font-size:.75rem">Retail Price</div>
+            <div style="font-weight:700;font-size:1.15rem;color:var(--primary)">{{price_fmt}}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bench-right">
+      <div class="bench-card">
+        <h3>Inventory Stock</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem">
+          <div>
+            <div class="muted" style="font-size:.75rem">On Hand</div>
+            <div style="font-size:1.6rem;font-weight:800;color:var(--primary)">{{qty_on_hand}}</div>
+          </div>
+          <div>
+            <div class="muted" style="font-size:.75rem">Reorder Point</div>
+            <div style="font-size:1.6rem;font-weight:800">{{reorder_point}}</div>
+          </div>
+          <div>
+            <div class="muted" style="font-size:.75rem">Reorder Qty</div>
+            <div style="font-size:1.6rem;font-weight:800">{{reorder_qty}}</div>
+          </div>
+        </div>
+        <div id="adjust-area" style="display:flex;align-items:center;gap:.5rem;border-top:1px solid var(--border-color);padding-top:.75rem">
+          <button class="btn btn-ghost btn-sm" id="btn-adjust">Adjust Stock</button>
+          <a href="#/purchasing/new?part_id={{part_id}}" class="btn btn-secondary btn-sm">Create Purchase Order</a>
+        </div>
+      </div>
+
+      <div class="bench-card">
+        <h3>Stock Adjustment History</h3>
+        <table>
+          <thead><tr><th>Date</th><th>Reason / Source</th><th class="num">Delta</th></tr></thead>
+          <tbody>
+            {{#each adjustments}}
+            <tr>
+              <td>{{date}}</td>
+              <td>
+                <span>{{reason_label}}</span>
+                {{#if ref_url}}
+                  <a href="{{ref_url}}" style="margin-left:.35rem;font-weight:600">({{ref_name}})</a>
+                {{/if}}
+              </td>
+              <td class="num {{delta_class}}">{{delta_fmt}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="3" style="text-align:center;color:var(--color-gray-400)">No adjustments recorded yet.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+</script>
+
+<!-- ── Part add/edit form ───────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-parts-form">
+<section class="page">
+  <div class="page-header">
+    <h1>{{title}}</h1>
+    <a href="{{back_href}}" class="btn btn-ghost">Cancel</a>
+  </div>
+  <div class="bench-card" style="max-width:680px">
+    <form id="form-part">
+      <div class="form-grid-2">
+        <div class="field"><label>Part # *</label>
+          <input type="text" name="part_number" required value="{{part_number}}"></div>
+        <div class="field"><label>Description *</label>
+          <input type="text" name="description" required value="{{description}}"></div>
+        <div class="field"><label>Cost ($)</label>
+          <input type="number" name="cost" step="0.01" min="0" value="{{cost}}"></div>
+        <div class="field"><label>Sell Price ($)</label>
+          <input type="number" name="price" step="0.01" min="0" value="{{price}}"></div>
+        <div class="field"><label>Qty on Hand</label>
+          <input type="number" name="qty_on_hand" min="0" value="{{qty_on_hand}}"></div>
+        <div class="field"><label>Reorder Point</label>
+          <input type="number" name="reorder_point" min="0" value="{{reorder_point}}"></div>
+        <div class="field"><label>Reorder Qty</label>
+          <input type="number" name="reorder_qty" min="0" value="{{reorder_qty}}"></div>
+        <div class="field"><label>Preferred Supplier</label>
+          <select name="supplier_id">
+            <option value="">— None —</option>
+            {{#each suppliers}}
+            <option value="{{id}}"{{#if is_selected}} selected{{/if}}>{{name}}</option>
+            {{/each}}
+          </select></div>
+        <div class="field" style="grid-column:1/-1"><label>Compatible With (multi-select)</label>
+          <select name="compatible_categories" multiple size="4">
+            {{#each categories}}
+            <option value="{{value}}"{{#if is_selected}} selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select></div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top:1rem">Save Part</button>
+    </form>
+  </div>
+</section>
+</script>
+
+<!-- ── Part stock adjust form ────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-parts-adjust-form">
+<form id="form-adjust" style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap">
+  <div class="field" style="margin:0">
+    <label style="font-size:.8rem">Delta (+/-)</label>
+    <input type="number" name="delta" style="width:80px" />
+  </div>
+  <div class="field" style="margin:0">
+    <label style="font-size:.8rem">Reason</label>
+    <select name="reason">
+      <option value="count">Inventory Counted</option>
+      <option value="write_off">Write-off / damage</option>
+      <option value="return">Customer return</option>
+      <option value="other">Other</option>
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary btn-sm">Save</button>
+  <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-adj">Cancel</button>
+</form>
+</script>

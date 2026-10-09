@@ -1,0 +1,47 @@
+# ── Lookup constants ──────────────────────────────────────────────────────────
+# Single source of truth for all coded-list values.
+# Server-side:  apps/shop/constants.py loads this file via PyYAML.
+# Client-side:  apps/shop/static/py/constants.py fetches /shop/api/constants.
+# To add or remove a value, edit only this file.
+
+equipment_categories:
+  - value: mower
+    label: Mower
+  - value: chainsaw
+    label: Chainsaw
+  - value: leaf_blower
+    label: Leaf Blower
+  - value: trimmer
+    label: Trimmer
+  - value: generator
+    label: Generator
+  - value: pressure_washer
+    label: Pressure Washer
+  - value: other
+    label: Other
+
+supplier_terms:
+  - value: COD
+    label: "COD (Cash on Delivery)"
+  - value: CIA
+    label: "CIA (Cash in Advance / Prepaid)"
+  - value: NET15
+    label: Net 15
+  - value: NET30
+    label: Net 30
+  - value: CARD
+    label: Credit Card on File
+
+shipping_methods:
+  - value: will_call
+    label: Will Call
+  - value: ups_ground
+    label: UPS Ground
+  - value: fedex_ground
+    label: FedEx Ground
+  - value: usps
+    label: USPS
+  - value: freight
+    label: Freight
+  - value: other
+    label: Other

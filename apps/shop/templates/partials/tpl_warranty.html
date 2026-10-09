@@ -1,0 +1,304 @@
+<!-- ── Warranty Claims SPA layout ────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-warranty-list">
+<section class="page">
+  <div class="page-header">
+    <h1>Warranty Hub</h1>
+  </div>
+
+  <!-- Sub navigation / tabs -->
+  <div class="quick-links" style="margin-bottom: 1.5rem;">
+    <button class="btn btn-sm {{#if (eq active_tab 'claims')}}btn-primary{{else}}btn-ghost{{/if}}" id="tab-claims">Claims</button>
+    <button class="btn btn-sm {{#if (eq active_tab 'eligible')}}btn-primary{{else}}btn-ghost{{/if}}" id="tab-eligible">Submit Claim ({{eligible_count}})</button>
+    <button class="btn btn-sm {{#if (eq active_tab 'mfrs')}}btn-primary{{else}}btn-ghost{{/if}}" id="tab-mfrs">Manufacturers</button>
+  </div>
+
+  <!-- ── Tab content: Claims ── -->
+  {{#if (eq active_tab 'claims')}}
+  <div class="bench-card">
+    <h3>Active & Closed Claims</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>WO #</th>
+          <th>Manufacturer</th>
+          <th>Customer</th>
+          <th>Equipment</th>
+          <th>Submitted</th>
+          <th>Labor</th>
+          <th>Parts</th>
+          <th>Status</th>
+          <th>Paid Amt</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each claims}}
+        <tr>
+          <td><a href="#/workorders/{{work_order_id}}">#{{work_order_id}}</a></td>
+          <td>{{manufacturer_name}}</td>
+          <td>{{customer_name}}</td>
+          <td>{{equip_desc}}</td>
+          <td>{{submitted_date}}</td>
+          <td>${{covered_labor}}</td>
+          <td>${{covered_parts}}</td>
+          <td><span class="badge badge-{{status}}">{{status}}</span></td>
+          <td>{{#if reimbursement_amount}}${{reimbursement_amount}}{{else}}—{{/if}}</td>
+          <td>
+            <button class="btn btn-ghost btn-xs btn-view-claim" data-claim-id="{{id}}">Details</button>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="10" class="empty">No warranty claims found.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  <!-- ── Tab content: Eligible Work Orders ── -->
+  {{#if (eq active_tab 'eligible')}}
+  <div class="bench-card">
+    <h3>Work Orders Awaiting Claim Submission</h3>
+    <p class="muted" style="margin-bottom: 1rem;">These are closed work orders marked as warranty work that do not have claims generated yet.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>WO #</th>
+          <th>Customer</th>
+          <th>Equipment</th>
+          <th>Date In</th>
+          <th>Warranty Labor</th>
+          <th>Warranty Parts</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each eligible}}
+        <tr>
+          <td><a href="#/workorders/{{id}}">#{{id}}</a></td>
+          <td>{{customer_name}}</td>
+          <td>{{equip_desc}}</td>
+          <td>{{date_in}}</td>
+          <td>${{covered_labor}}</td>
+          <td>${{covered_parts}}</td>
+          <td>
+            <button class="btn btn-primary btn-xs btn-create-claim" 
+                    data-wo-id="{{id}}" 
+                    data-mfr-id="{{manufacturer_id}}"
+                    data-labor="{{covered_labor}}" 
+                    data-parts="{{covered_parts}}">Submit Claim</button>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="7" class="empty">No work orders awaiting claim submission.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  <!-- ── Tab content: Manufacturers ── -->
+  {{#if (eq active_tab 'mfrs')}}
+  <div class="bench-card">
+    <div class="page-header" style="margin-bottom: .75rem;">
+      <h3>Warranty Partners</h3>
+      <button class="btn btn-primary btn-sm" id="btn-new-mfr">+ Add Manufacturer</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Contact</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Dealer ID</th>
+          <th>Flat Rate Labor</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each manufacturers}}
+        <tr>
+          <td><strong>{{name}}</strong></td>
+          <td>{{contact_name}}</td>
+          <td>{{phone}}</td>
+          <td>{{email}}</td>
+          <td>{{dealer_id}}</td>
+          <td>{{#if flat_rate_labor}}Yes{{else}}No{{/if}}</td>
+          <td>
+            <button class="btn btn-ghost btn-xs btn-edit-mfr" data-mfr-id="{{id}}">Edit</button>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="7" class="empty">No manufacturers on file.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+</section>
+</script>
+
+<!-- ── Warranty claim details modal ─────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-warranty-claim-detail">
+<div style="padding-bottom:1rem">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem">
+    <div>
+      <h4 class="muted">Claim Information</h4>
+      <p style="margin-top:.25rem"><strong>Claim Status</strong>: <span class="badge badge-{{status}}">{{status}}</span></p>
+      {{#if mfr_claim_number}}<p><strong>Mfr Claim #</strong>: {{mfr_claim_number}}</p>{{/if}}
+      <p><strong>Submitted Date</strong>: {{submitted_date}}</p>
+      {{#if payment_date}}<p><strong>Payment Date</strong>: {{payment_date}}</p>{{/if}}
+    </div>
+    <div>
+      <h4 class="muted">Shop Associations</h4>
+      <p style="margin-top:.25rem"><strong>Manufacturer</strong>: {{manufacturer_name}}</p>
+      <p><strong>Work Order</strong>: <a href="#/workorders/{{work_order_id}}" id="link-claim-wo">#{{work_order_id}}</a></p>
+      <p><strong>Customer</strong>: {{customer_name}}</p>
+      <p><strong>Equipment</strong>: {{equip_desc}}</p>
+    </div>
+  </div>
+
+  <div class="bench-card" style="margin-bottom: 1.5rem;">
+    <h3>Amounts Covered</h3>
+    <table class="lines-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th class="num">Amount Claimed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Labor Coverage</td>
+          <td class="num">${{covered_labor}}</td>
+        </tr>
+        <tr>
+          <td>Parts Coverage</td>
+          <td class="num">${{covered_parts}}</td>
+        </tr>
+        <tr style="font-weight:bold;border-top:2px solid var(--border-color)">
+          <td>Total Claimed</td>
+          <td class="num">${{total_claimed}}</td>
+        </tr>
+        {{#if reimbursement_amount}}
+        <tr style="font-weight:bold;color:#065f46;border-top:1px solid #d1fae5">
+          <td>Reimbursement Paid</td>
+          <td class="num">${{reimbursement_amount}}</td>
+        </tr>
+        {{/if}}
+      </tbody>
+    </table>
+  </div>
+
+  {{#if notes}}
+  <div style="margin-bottom: 1.5rem;">
+    <h4 class="muted">Notes</h4>
+    <p style="margin-top:.25rem;white-space:pre-line;">{{notes}}</p>
+  </div>
+  {{/if}}
+
+  {{#if (eq status 'submitted')}}
+  <div class="bench-card" style="border-top:3px solid var(--tertiary)">
+    <h3>Record Payment / Response</h3>
+    <form id="form-claim-payment">
+      <div class="form-grid-2">
+        <div class="field">
+          <label>Reimbursement Amount ($) *</label>
+          <input type="number" name="amount" step="0.01" value="{{total_claimed}}" required />
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end;">
+          <button type="submit" class="btn btn-primary" style="width:100%;">Mark Claim Paid</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  {{/if}}
+
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-close-claim-detail">Close</button>
+  </div>
+</div>
+</script>
+
+<!-- ── Submit Warranty Claim form (modal body) ──────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-warranty-claim-form">
+<form id="form-submit-warranty">
+  <input type="hidden" name="work_order_id" value="{{wo_id}}" />
+  
+  <div class="field">
+    <label>Manufacturer *</label>
+    <select name="manufacturer_id" required>
+      <option value="">— Select —</option>
+      {{#each manufacturers}}
+      <option value="{{id}}" {{#if is_selected}}selected{{/if}}>{{name}}</option>
+      {{/each}}
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Manufacturer Claim/RO Number (optional)</label>
+    <input type="text" name="mfr_claim_number" placeholder="Enter manufacturer reference code" />
+  </div>
+
+  <div class="form-grid-2">
+    <div class="field">
+      <label>Covered Labor ($) *</label>
+      <input type="number" name="covered_labor" step="0.01" value="{{covered_labor}}" required />
+    </div>
+    <div class="field">
+      <label>Covered Parts ($) *</label>
+      <input type="number" name="covered_parts" step="0.01" value="{{covered_parts}}" required />
+    </div>
+  </div>
+
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-cancel-claim-submit">Cancel</button>
+    <button type="submit" class="btn btn-primary">Create Claim</button>
+  </div>
+</form>
+</script>
+
+<!-- ── Manufacturer add/edit form (modal body) ──────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-manufacturer-form">
+<form id="form-manufacturer">
+  <div class="field">
+    <label>Manufacturer Name *</label>
+    <input type="text" name="name" value="{{name}}" required />
+  </div>
+
+  <div class="form-grid-2">
+    <div class="field">
+      <label>Contact Person</label>
+      <input type="text" name="contact_name" value="{{contact_name}}" />
+    </div>
+    <div class="field">
+      <label>Dealer ID / Account #</label>
+      <input type="text" name="dealer_id" value="{{dealer_id}}" />
+    </div>
+    <div class="field">
+      <label>Phone</label>
+      <input type="tel" name="phone" value="{{phone}}" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" name="email" value="{{email}}" />
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Warranty Submission Notes / Guidelines</label>
+    <textarea name="warranty_notes" rows="3">{{warranty_notes}}</textarea>
+  </div>
+
+  <label style="display:flex;align-items:center;gap:.4rem;margin:1rem 0">
+    <input type="checkbox" name="flat_rate_labor" {{#if flat_rate_labor}}checked{{/if}} />
+    Flat Rate Labor (uses flat rate guide codes instead of hourly shop rate)
+  </label>
+
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-cancel-mfr">Cancel</button>
+    <button type="submit" class="btn btn-primary">{{action_label}}</button>
+  </div>
+</form>
+</script>

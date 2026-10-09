@@ -1,0 +1,932 @@
+<!-- ── Work orders list ─────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-workorders-list">
+<section class="page">
+  <div class="page-header" style="margin-bottom: 1rem;">
+    <h1>Work Orders</h1>
+    <a href="#/workorders/new" class="btn btn-primary">+ New Intake</a>
+  </div>
+
+  <div class="quick-links" style="margin-bottom: 1.5rem;">
+    <button class="btn btn-sm {{#if (eq active_filter 'active')}}btn-primary{{else}}btn-ghost{{/if}}" id="btn-wo-active">Active Queue</button>
+    <button class="btn btn-sm {{#if (eq active_filter 'completed')}}btn-primary{{else}}btn-ghost{{/if}}" id="btn-wo-completed">Recently Completed</button>
+    <button class="btn btn-sm {{#if (eq active_filter 'all')}}btn-primary{{else}}btn-ghost{{/if}}" id="btn-wo-all">Browse All</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Customer</th>
+        <th>Equipment</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>{{#if (eq active_filter 'completed')}}Resolved{{else}}Promised{{/if}}</th>
+        <th>Tech</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each work_orders}}
+      <tr class="{{#if is_overdue}}overdue{{/if}}">
+        <td><a href="#/workorders/{{id}}">#{{id}}</a></td>
+        <td>{{customer_name}}</td>
+        <td>{{equip_desc}}</td>
+        <td>{{work_type}}</td>
+        <td><span class="badge badge-{{status}}">{{status_label}}</span></td>
+        <td class="date-col {{#if is_overdue}}overdue{{/if}}">
+          {{#if (eq ../active_filter 'completed')}}
+            {{date_out}}
+          {{else}}
+            {{date_promised}}
+          {{/if}}
+        </td>
+        <td>{{tech_name}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="7" class="empty">No work orders found in this view.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+</script>
+
+<!-- ── Work order intake form ───────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-workorders-intake">
+<section class="page">
+  <div class="page-header">
+    <h1>New Work Order — Intake</h1>
+    <a href="#/workorders" class="btn btn-ghost">Cancel</a>
+  </div>
+  <div class="intake-form">
+
+    <div class="intake-section" id="section-customer">
+      <h2>1. Customer</h2>
+      <div class="field">
+        <input type="search" id="customer-search-input"
+               placeholder="Search by name, phone, or email…" autocomplete="off" />
+        <div id="customer-search-results" class="search-dropdown hidden"></div>
+      </div>
+      <div id="customer-selected" class="selected-card hidden"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-new-customer-inline">
+        + New Customer</button>
+      <div id="new-customer-form"></div>
+    </div>
+
+    <div class="intake-section" style="margin-top:1.5rem" id="section-equipment">
+      <h2>2. Equipment</h2>
+      <div id="equipment-picker"><p class="muted">Select a customer first.</p></div>
+    </div>
+
+    <div class="intake-section" style="margin-top:1.5rem">
+      <h2>3. Job Details</h2>
+      <div class="form-grid-2">
+        <div class="field" style="grid-column:1/-1">
+          <label>Customer complaint *</label>
+          <textarea id="intake-problem" rows="2"
+                    placeholder="Won't start, yearly maintenance…"></textarea>
+        </div>
+        <div class="field">
+          <label>Work type</label>
+          <select id="intake-work-type">
+            <option value="repair">Repair</option>
+            <option value="maintenance">Maintenance</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Assign tech</label>
+          <select id="intake-employee">
+            <option value="">— Unassigned —</option>
+            {{#each employees}}
+            <option value="{{id}}">{{name}}</option>
+            {{/each}}
+          </select>
+        </div>
+        <div class="field">
+          <label>Promise date <small class="muted">(suggested)</small></label>
+          <input type="date" id="intake-promise" value="{{default_promise}}" />
+        </div>
+        <div class="field">
+          <label>Pre-approval limit ($) <small class="muted">(auto-proceed threshold)</small></label>
+          <input type="number" id="intake-approval-limit" step="0.01" min="0" placeholder="Default (${{default_approval_threshold}})" value="{{default_approval_threshold}}" />
+        </div>
+        <div class="field">
+          <label>Initial estimate ($) <small class="muted">(optional)</small></label>
+          <input type="number" id="intake-estimated-cost" step="0.01" min="0" placeholder="e.g. 75.00" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Notes</label>
+        <textarea id="intake-notes" rows="2"></textarea>
+      </div>
+      <button type="button" class="btn btn-primary" id="btn-submit-intake"
+              disabled>Create Work Order</button>
+    </div>
+  </div>
+</section>
+</script>
+
+<!-- ── Intake customer search results ───────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-intake-customer-results">
+{{#each customers}}
+<div class="search-result-item" data-id="{{id}}">{{first_name}} {{last_name}} — {{contact}}</div>
+{{else}}
+<div class="search-result-item muted">No results.</div>
+{{/each}}
+</script>
+
+<!-- ── Intake selected customer card ────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-intake-selected-customer">
+<div class="selected-card-inner">
+  <strong>{{first_name}} {{last_name}}</strong> — {{contact}}
+  <button type="button" class="btn btn-ghost btn-sm" id="btn-change-cust">Change</button>
+</div>
+</script>
+
+<!-- ── Intake equipment picker empty state ───────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-intake-picker-empty">
+<p class="muted">Select a customer first.</p>
+</script>
+
+<!-- ── Intake equipment picker error state ───────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-intake-picker-error">
+<p class="error">Could not load equipment: {{message}}</p>
+</script>
+
+<!-- ── Intake inline customer form ──────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-intake-customer-form">
+<div style="background:var(--color-gray-50);border:1px solid var(--color-gray-100);
+            border-radius:var(--radius);padding:1rem;margin-top:.5rem">
+  <form id="form-cust-inline">
+    <div class="form-grid-2">
+      <div class="field"><label>First Name *</label>
+        <input type="text" name="first_name" required /></div>
+      <div class="field"><label>Last Name *</label>
+        <input type="text" name="last_name" required /></div>
+      <div class="field"><label>Phone</label>
+        <input type="tel" name="phone" /></div>
+      <div class="field"><label>Email</label>
+        <input type="email" name="email" /></div>
+      <div class="field"><label>Preferred Contact</label>
+        <select name="contact_preference">
+          <option value="call">Phone Call</option>
+          <option value="sms">SMS / Text</option>
+          <option value="email">Email</option>
+        </select></div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Create &amp; Select</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-cust-inline">Cancel</button>
+  </form>
+</div>
+</script>
+
+<!-- ── Intake equipment picker ──────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-intake-equipment-picker">
+<div class="form-grid-2">
+  <div class="field">
+    <select id="equipment-select">
+      <option value="">— Select —</option>
+      {{#each equipment}}
+      <option value="{{id}}"{{#if is_selected}} selected{{/if}}>{{label}}</option>
+      {{/each}}
+    </select>
+  </div>
+</div>
+<button type="button" class="btn btn-ghost btn-sm" id="btn-add-equip-inline">+ New Equipment</button>
+<div id="new-equip-form"></div>
+</script>
+
+<!-- ── Intake inline equipment form ─────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-intake-equipment-form">
+<div style="background:var(--color-gray-50);border:1px solid var(--color-gray-100);
+            border-radius:var(--radius);padding:1rem;margin-top:.5rem">
+  <form id="form-equip-inline">
+    <div class="form-grid-2">
+      <div class="field"><label>Category *</label>
+        <select name="category">
+          {{#each categories}}
+          <option value="{{value}}">{{label}}</option>
+          {{/each}}
+        </select></div>
+      <div class="field"><label>Make</label>
+        <input type="text" name="make" /></div>
+      <div class="field"><label>Model</label>
+        <input type="text" name="model" /></div>
+      <div class="field"><label>Serial Number</label>
+        <input type="text" name="serial_number" /></div>
+      <div class="field"><label>Year</label>
+        <input type="number" name="year" min="1950" max="2030" /></div>
+      <div class="field"><label>Notes</label>
+        <input type="text" name="notes" /></div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Add &amp; Select</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-equip-inline">Cancel</button>
+  </form>
+</div>
+</script>
+
+<!-- ── Work order detail (bench view) ──────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-wo-detail">
+<section class="page bench-view">
+  <div class="bench-header">
+    <div>
+      <h1>WO #{{wo_id}} <span class="badge badge-{{status}}">{{status_label}}</span></h1>
+      <div class="bench-subtitle">
+        {{equip_desc}} &nbsp;·&nbsp;
+        <span class="muted">S/N: {{equip_sn}}</span>
+        &nbsp;·&nbsp; {{equip_category}}
+      </div>
+    </div>
+    <div class="bench-meta">
+      <span>Tech: <strong>{{tech_name}}</strong></span>
+      <span>In: {{date_in}}</span>
+      <span>Promised: <strong>{{date_promised}}</strong></span>
+      <span>Type: {{work_type}}</span>
+      <a href="#/workorders/{{wo_id}}/intake-doc" class="btn btn-ghost btn-sm" style="margin-left:.5rem">&#128196; Print Agreement</a>
+    </div>
+  </div>
+
+  <div class="bench-layout">
+    <div class="bench-left">
+
+      <div class="bench-card">
+        <h3>Complaint</h3>
+        <p class="complaint-text">{{reported_problem}}</p>
+        {{#if has_diagnosis}}
+        <h4 style="margin-top:.75rem">Diagnosis</h4>
+        <p>{{diagnosis}}</p>
+        {{/if}}
+        {{#if has_estimated_cost}}
+        <h4 style="margin-top:.5rem">Estimated Customer Cost</h4>
+        <p class="estimate-amount">{{estimated_cost_fmt}}</p>
+        {{/if}}
+      </div>
+
+      <div class="bench-card">
+        <h3>Customer</h3>
+        <p><a href="#/customers/{{cust_id}}">{{cust_name}}</a></p>
+        <p><strong>{{contact_label}}</strong> {{contact_value}}</p>
+      </div>
+
+      <div class="bench-card">
+        <h3>Communications <button class="btn btn-ghost btn-sm" id="btn-log-comm">+ Contact</button></h3>
+        <div id="comm-log">
+          {{#each comms}}
+          <div class="comm-entry">
+            <span class="comm-meta">{{logged_at}} {{direction_arrow}} {{method_title}} — {{employee_name}}</span>
+            <p class="comm-summary">{{summary}}</p>
+          </div>
+          {{else}}
+          <p class="muted empty">No communications logged.</p>
+          {{/each}}
+        </div>
+      </div>
+
+      <div class="bench-card">
+        <h3>Unit History</h3>
+        {{#each history}}
+        <div class="history-item">
+          <span class="badge badge-{{status}} badge-sm">{{status_label}}</span>
+          <a href="#/workorders/{{id}}">#{{id}}</a>
+          — {{reported_problem_short}}
+          <small class="muted">{{date_in}}</small>
+        </div>
+        {{else}}
+        <p class="muted empty">No prior history for this unit.</p>
+        {{/each}}
+      </div>
+
+      {{#if has_notes}}
+      <div class="bench-card">
+        <h3>Notes</h3>
+        <p>{{notes}}</p>
+      </div>
+      {{/if}}
+
+    </div>
+
+    <div class="bench-right">
+
+      <div class="bench-card">
+        <h3>Labor {{#if is_open}}<button class="btn btn-ghost btn-sm" id="btn-add-labor">+ Add</button>{{/if}}</h3>
+        <div id="labor-lines">
+          {{#if labor_lines}}
+          <table class="lines-table">
+            <thead><tr>
+              <th>Description</th><th>Hours</th><th>Rate</th><th>Total</th><th>W</th><th></th>
+            </tr></thead>
+            <tbody>
+              {{#each labor_lines}}
+              <tr>
+                <td>{{description}}</td>
+                <td>{{hours}}</td>
+                <td>{{rate_fmt}}</td>
+                <td>{{total_fmt}}</td>
+                <td class="warranty-col" title="Warranty covered">{{#if is_warranty}}✓{{/if}}</td>
+                <td>{{#if ../is_open}}<button class="btn btn-danger btn-xs" onclick="deleteLabor({{../wo_id}},{{id}})">✕</button>{{/if}}</td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
+          {{else}}
+          <p class="muted empty">No labor logged yet.</p>
+          {{/if}}
+        </div>
+        <div id="labor-form"></div>
+      </div>
+
+      <div class="bench-card">
+        <h3>Parts {{#if is_open}}<button class="btn btn-ghost btn-sm" id="btn-add-part">+ Add</button>{{/if}}</h3>
+        <div id="part-lines">
+          {{#if part_lines}}
+          <table class="lines-table">
+            <thead><tr>
+              <th>Description</th><th>Qty</th><th>Price</th><th>Total</th><th>W</th><th></th>
+            </tr></thead>
+            <tbody>
+              {{#each part_lines}}
+              <tr>
+                <td>{{description}}</td>
+                <td>{{quantity}}</td>
+                <td>{{unit_price_fmt}}</td>
+                <td>{{total_fmt}}</td>
+                <td class="warranty-col" title="Warranty covered">{{#if is_warranty}}✓{{/if}}</td>
+                <td>{{#if ../is_open}}<button class="btn btn-danger btn-xs" onclick="deletePart({{../wo_id}},{{id}})">✕</button>{{/if}}</td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
+          {{else}}
+          <p class="muted empty">No parts logged yet.</p>
+          {{/if}}
+        </div>
+        <div id="part-form"></div>
+        <div style="margin:.75rem -1rem 0;padding:.5rem 1rem .25rem;background:var(--color-gray-50);border-top:2px solid var(--color-gray-200)">
+          <h4 style="margin-bottom:.4rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-gray-400)">Suggested for {{equip_category}}</h4>
+          <div id="suggested-parts">
+            {{#each suggested_parts}}
+            <div class="suggested-part" data-part-id="{{id}}" data-price="{{price}}" data-cost="{{cost}}"
+                 style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.3rem 0;border-bottom:1px solid var(--color-gray-200)">
+              <span style="font-size:.875rem">{{description}}</span>
+              <span class="muted" style="font-size:.8rem;white-space:nowrap;text-align:right">{{qty_on_hand}} on hand</span>
+              {{#if ../is_open}}<button class="btn btn-ghost btn-sm btn-add-suggested">Add</button>{{/if}}
+            </div>
+            {{else}}
+            <p class="muted empty">No suggested parts on file.</p>
+            {{/each}}
+          </div>
+        </div>
+      </div>
+
+      <div class="bench-card" id="running-total">
+        <div style="display:grid;grid-template-columns:1fr auto;gap:.25rem .75rem;align-items:baseline">
+          <span class="muted" style="font-size:.875rem">Labor</span>
+          <span style="text-align:right;font-size:.875rem">{{labor_total_fmt}}</span>
+          <span class="muted" style="font-size:.875rem">Parts</span>
+          <span style="text-align:right;font-size:.875rem">{{parts_total_fmt}}</span>
+          <span style="font-weight:700;padding-top:.25rem;border-top:1px solid var(--color-gray-200)">Estimated Total</span>
+          <span style="font-weight:700;text-align:right;padding-top:.25rem;border-top:1px solid var(--color-gray-200)">{{grand_total_fmt}}</span>
+          {{#if has_overage}}
+          <span style="font-size:.8rem;color:{{overage_color}};grid-column:1/-1;text-align:right;margin-top:.1rem">{{overage_fmt}}</span>
+          {{/if}}
+        </div>
+      </div>
+
+      <div class="bench-card">
+        <h3>Actions</h3>
+        <div id="action-panel">
+          {{#if (eq status "intake")}}
+          <button class="btn btn-primary" id="btn-action-diagnose">Record Diagnosis</button>
+          <button class="btn btn-danger" id="btn-action-cancel" style="margin-left:.5rem">Cancel WO</button>
+          {{/if}}
+          {{#if (eq status "diagnosed")}}
+          <button class="btn btn-primary" id="btn-action-request-approval">Request Approval</button>
+          <button class="btn btn-secondary" id="btn-action-start-repair" style="margin-left:.5rem">Start Repair (no approval needed)</button>
+          <button class="btn btn-danger" id="btn-action-cancel" style="margin-left:.5rem">Cancel WO</button>
+          {{/if}}
+          {{#if (eq status "awaiting_approval")}}
+          {{#if has_estimated_cost}}<div class="approval-estimate">Estimated customer cost: <strong>{{estimated_cost_fmt}}</strong></div>{{/if}}
+          <button class="btn btn-primary" id="btn-action-approve">Customer Approved</button>
+          <button class="btn btn-danger" id="btn-action-decline" style="margin-left:.5rem">Customer Declined</button>
+          {{/if}}
+          {{#if (eq status "in_repair")}}
+          <button class="btn btn-primary" id="btn-action-ready">Mark Ready for Pickup</button>
+          <button class="btn btn-secondary" id="btn-action-need-parts" style="margin-left:.5rem">Need Parts</button>
+          {{/if}}
+          {{#if (eq status "awaiting_parts")}}
+          <button class="btn btn-primary" id="btn-action-parts-arrived">Parts Arrived</button>
+          {{/if}}
+          {{#if (eq status "ready")}}
+          {{#if is_notified}}
+          <p class="muted" style="margin-bottom:.75rem;font-size:.875rem">&#10003; Customer notified {{notified_at}}</p>
+          {{else}}
+          <button class="btn btn-secondary" id="btn-action-notify" style="margin-bottom:.75rem">Mark Customer Notified</button>
+          {{/if}}
+          {{#if has_invoice}}
+          <p style="margin-bottom:.5rem"><strong>Invoice #{{inv_id}}</strong> — {{inv_total_fmt}} <span class="badge badge-neutral badge-sm">{{inv_status}}</span></p>
+          <a href="#/workorders/{{wo_id}}/invoice" class="btn btn-ghost">View / Print Invoice</a>
+          {{#unless inv_is_paid}}<button class="btn btn-secondary" id="btn-action-payment" style="margin-left:.5rem">Record Payment</button>{{/unless}}
+          {{#if inv_is_paid}}
+          <button class="btn btn-primary" id="btn-action-close" style="margin-top:.5rem;display:block">Close Work Order</button>
+          {{else}}
+          <p class="muted" style="margin-top:.5rem;font-size:.85rem">Invoice must be fully paid before closing.</p>
+          {{/if}}
+          {{else}}
+          <button class="btn btn-secondary" id="btn-action-invoice">Generate Invoice</button>
+          {{/if}}
+          {{/if}}
+          {{#if (eq status "closed")}}
+          {{#if is_picked_up}}
+          <p class="muted" style="margin-bottom:.5rem">&#10003; Picked up {{date_out}}</p>
+          {{else}}
+          {{#if show_inventory_option}}
+          <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:var(--radius);padding:.6rem .75rem;margin-bottom:.75rem;font-size:.875rem">
+            Unit has been here <strong>{{days_waiting}} days</strong> — consider moving to shop inventory.
+            <button class="btn btn-sm" id="btn-action-to-inventory" style="margin-top:.4rem;display:block;background:#f59e0b;color:#fff;border:none">Move to Shop Inventory</button>
+          </div>
+          {{else}}
+          <p class="muted" style="margin-bottom:.5rem;font-size:.875rem">Waiting for pickup — {{days_waiting}} day(s) so far.</p>
+          {{/if}}
+          <div id="pickup-form-area">
+            <button class="btn btn-primary" id="btn-action-pickup">Mark as Picked Up</button>
+          </div>
+          {{/if}}
+          {{#if has_invoice}}<a href="#/workorders/{{wo_id}}/invoice" class="btn btn-ghost" style="margin-top:.75rem;display:inline-block">View Invoice #{{inv_id}}</a>{{/if}}
+          {{/if}}
+          {{#if (eq status "cancelled")}}
+          <p class="muted">Work order is cancelled.</p>
+          {{#if has_invoice}}<a href="#/workorders/{{wo_id}}/invoice" class="btn btn-ghost" style="margin-top:.5rem;display:inline-block">View Invoice #{{inv_id}}</a>{{/if}}
+          {{/if}}
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+</script>
+
+<!-- ── Invoice (printable) ──────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-invoice">
+<div class="no-print" style="padding:1rem;display:flex;gap:.75rem;align-items:center">
+  <a href="#/workorders/{{wo_id}}" class="btn btn-ghost">&larr; Back to WO #{{wo_id}}</a>
+  <button class="btn btn-primary" onclick="window.print()">Print Invoice</button>
+</div>
+
+<div class="invoice-sheet">
+  <div class="invoice-header">
+    <div>
+      <h1 class="invoice-shop-name">{{shop_name}}</h1>
+      <p class="invoice-shop-addr">{{shop_addr_line}}</p>
+      {{#if shop_phone}}<p class="invoice-shop-addr">{{shop_phone}}</p>{{/if}}
+    </div>
+    <div class="invoice-meta">
+      <h2>Invoice #{{inv_id}}</h2>
+      <table class="invoice-meta-table">
+        <thead>
+          <tr>
+            <th>Work Order</th>
+            <th>Date In</th>
+            {{#if date_out}}<th>Date Out</th>{{/if}}
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>#{{wo_id}}</td>
+            <td>{{date_in}}</td>
+            {{#if date_out}}<td>{{date_out}}</td>{{/if}}
+            <td>{{inv_status}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="invoice-parties">
+    <div>
+      <h3>Bill To</h3>
+      <p><strong>{{cust_name}}</strong></p>
+      {{#if cust_phone}}<p>{{cust_phone}}</p>{{/if}}
+    </div>
+    <div>
+      <h3>Equipment</h3>
+      <p><strong>{{equip_desc}}</strong></p>
+      {{#if equip_sn}}<p>S/N: {{equip_sn}}</p>{{/if}}
+    </div>
+  </div>
+
+  {{#if labor_lines}}
+  <div class="invoice-section">
+    <h3>Labor</h3>
+    <table class="invoice-table">
+      <thead><tr>
+        <th>Description</th><th class="num">Hours</th>
+        <th class="num">Rate</th><th class="num">Amount</th>
+      </tr></thead>
+      <tbody>
+        {{#each labor_lines}}
+        <tr>
+          <td>{{description}}{{#if is_warranty}} (warranty){{/if}}</td>
+          <td class="num">{{hours_fmt}} hrs</td>
+          <td class="num">{{rate_fmt}}/hr</td>
+          <td class="num">{{total_fmt}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  {{#if part_lines}}
+  <div class="invoice-section">
+    <h3>Parts &amp; Materials</h3>
+    <table class="invoice-table">
+      <thead><tr>
+        <th>Description</th><th class="num">Qty</th>
+        <th class="num">Unit Price</th><th class="num">Amount</th>
+      </tr></thead>
+      <tbody>
+        {{#each part_lines}}
+        <tr>
+          <td>{{description}}{{#if is_warranty}} (warranty){{/if}}</td>
+          <td class="num">{{quantity}}</td>
+          <td class="num">{{unit_price_fmt}}</td>
+          <td class="num">{{total_fmt}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  {{#if payments}}
+  <div class="invoice-section">
+    <h3>Payments</h3>
+    <table class="invoice-table">
+      <thead><tr><th>Date</th><th>Method</th><th class="num">Amount</th></tr></thead>
+      <tbody>
+        {{#each payments}}
+        <tr>
+          <td>{{received_on}}</td>
+          <td>{{method_label}}{{#if reference}} ({{reference}}){{/if}}</td>
+          <td class="num">{{amount_fmt}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  <div class="invoice-totals">
+    <table>
+      <tr><th>Subtotal</th><td>{{subtotal_fmt}}</td></tr>
+      {{#if has_warranty_credit}}<tr><th>Warranty Credit</th><td>&minus;{{warranty_credit_fmt}}</td></tr>{{/if}}
+      <tr><th>Tax ({{tax_rate_pct}})</th><td>{{tax_fmt}}</td></tr>
+      <tr class="total-row"><th>Total Due</th><td>{{total_fmt}}</td></tr>
+      {{#if payments}}
+      <tr><th>Payments Received</th><td>&minus;{{total_paid_fmt}}</td></tr>
+      {{#if is_paid}}
+      <tr class="balance-paid-row"><th>Balance Due</th><td>$0.00 &#x2713;</td></tr>
+      {{else}}
+      <tr class="balance-row"><th>Balance Due</th><td>{{balance_due_fmt}}</td></tr>
+      {{/if}}
+      {{/if}}
+    </table>
+  </div>
+
+  <p class="invoice-footer">Thank you for your business!</p>
+</div>
+</script>
+
+<!-- ── Intake Document (printable agreement) ────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-intake-doc">
+<div class="no-print" style="padding:1rem;display:flex;gap:.75rem;align-items:center">
+  <a href="#/workorders/{{wo_id}}" class="btn btn-ghost">&larr; Back to WO #{{wo_id}}</a>
+  <button class="btn btn-primary" onclick="window.print()">Print Agreement</button>
+</div>
+
+<div class="invoice-sheet intake-doc-sheet">
+  <div class="invoice-header">
+    <div>
+      <h1 class="invoice-shop-name">{{shop_name}}</h1>
+      <p class="invoice-shop-addr">{{shop_addr_line}}</p>
+      {{#if shop_phone}}<p class="invoice-shop-addr">Phone: {{shop_phone}}{{#if shop_email}} &middot; {{shop_email}}{{/if}}</p>{{/if}}
+    </div>
+    <div class="invoice-meta">
+      <h2 style="color:var(--primary);margin:0 0 .2rem">WORK ORDER #{{wo_id}}</h2>
+      <div style="font-size:0.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--outline);margin-bottom:.4rem">Intake &amp; Service Agreement</div>
+      <table class="invoice-meta-table">
+        <thead>
+          <tr>
+            <th>Date In</th>
+            <th>Target Date</th>
+            <th>Type</th>
+            {{#if tech_name}}<th>Tech</th>{{/if}}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>{{date_in}}</strong></td>
+            <td>{{date_promised}}</td>
+            <td>{{work_type}}</td>
+            {{#if tech_name}}<td>{{tech_name}}</td>{{/if}}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="invoice-parties" style="margin-bottom:1.25rem">
+    <div style="background:#f8fafc;padding:.75rem;border-radius:4px;border:1px solid #e2e8f0">
+      <h3>Customer Information</h3>
+      <p style="font-size:1rem;margin-bottom:.25rem"><strong>{{cust_name}}</strong></p>
+      {{#if cust_phone}}<p style="margin:0 0 .15rem">Phone: {{cust_phone}}</p>{{/if}}
+      {{#if cust_email}}<p style="margin:0 0 .15rem">Email: {{cust_email}}</p>{{/if}}
+      {{#if cust_addr_line}}<p style="margin:0">{{cust_addr_line}}</p>{{/if}}
+      {{#if contact_pref}}<p class="muted" style="margin-top:.25rem;font-size:.75rem">Prefers: {{contact_pref}}</p>{{/if}}
+    </div>
+    <div style="background:#f8fafc;padding:.75rem;border-radius:4px;border:1px solid #e2e8f0">
+      <h3>Equipment Information</h3>
+      <p style="font-size:1rem;margin-bottom:.25rem"><strong>{{equip_desc}}</strong></p>
+      <p style="margin:0 0 .15rem">Category: <strong>{{equip_category}}</strong></p>
+      <p style="margin:0 0 .15rem">Serial #: <strong>{{equip_sn}}</strong></p>
+      {{#if equip_condition}}<p class="muted" style="margin:0;font-size:.75rem">Condition: {{equip_condition}}</p>{{/if}}
+    </div>
+  </div>
+
+  <div class="intake-section-box" style="margin-bottom:1.25rem;padding:.75rem;border:1px solid #cbd5e1;border-radius:4px">
+    <h3 style="font-size:.75rem;font-weight:800;text-transform:uppercase;color:var(--text-muted);margin:0 0 .35rem">Reported Issue / Work Requested</h3>
+    <div style="font-size:.95rem;font-weight:600;color:#0f172a;min-height:2.5rem;white-space:pre-wrap">{{reported_problem}}</div>
+    {{#if has_notes}}
+    <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px dashed #cbd5e1;font-size:.85rem;color:#475569">
+      <strong>Intake Notes:</strong> {{notes}}
+    </div>
+    {{/if}}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem">
+    <div style="background:#f1f5f9;padding:.6rem .75rem;border-radius:4px;font-size:.85rem">
+      <span class="muted" style="font-size:.75rem;display:block">Initial Estimate:</span>
+      <strong>{{#if has_estimate}}{{estimated_cost_fmt}}{{else}}Pending Diagnostic Evaluation{{/if}}</strong>
+    </div>
+    <div style="background:#f1f5f9;padding:.6rem .75rem;border-radius:4px;font-size:.85rem">
+      <span class="muted" style="font-size:.75rem;display:block">Pre-Authorized Approval Limit:</span>
+      <strong>{{approval_threshold_fmt}}</strong>
+    </div>
+  </div>
+
+  <div class="intake-terms-box" style="margin-bottom:1.5rem;padding:.85rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
+    <h3 style="font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#334155;margin:0 0 .5rem">Service Terms &amp; Repair Authorization</h3>
+    <div class="intake-disclaimer-text" style="font-size:.75rem;color:#475569;line-height:1.45;white-space:pre-wrap">{{intake_disclaimer}}</div>
+  </div>
+
+  <div class="intake-signature-block" style="margin-top:1.5rem;padding-top:1rem;border-top:2px solid #0f172a">
+    <p style="font-size:.8rem;color:#1e293b;margin:0 0 1.5rem;line-height:1.35">
+      <strong>Authorization Acknowledgment:</strong> I have read, understand, and agree to the repair service terms, diagnostic fees, and storage policies stated above. I hereby authorize the diagnosis and repair of the equipment described.
+    </p>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:2rem;align-items:flex-end">
+      <div>
+        <div style="border-bottom:1.5px solid #0f172a;height:2rem;margin-bottom:.35rem"></div>
+        <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;color:#475569">Customer Signature</div>
+      </div>
+      <div>
+        <div style="border-bottom:1.5px solid #0f172a;height:2rem;margin-bottom:.35rem"></div>
+        <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;color:#475569">Date</div>
+      </div>
+    </div>
+    <div style="margin-top:.75rem;font-size:.8rem;color:#64748b">
+      Printed Name: <strong>{{cust_name}}</strong>
+    </div>
+  </div>
+</div>
+</script>
+
+<!-- ── WO bench inline forms ─────────────────────────────────────────────────── -->
+
+<!-- Labor form -->
+<script type="text/x-handlebars-template" id="tpl-wo-labor-form">
+<form id="form-labor" class="inline-form" style="margin-top:.5rem">
+  <div class="form-grid-3">
+    <div class="field" style="grid-column:1/-1"><label>Description *</label>
+      <input type="text" name="description" required /></div>
+    <div class="field"><label>Hours *</label>
+      <input type="number" name="hours" step="0.25" min="0.25" required /></div>
+    <div class="field"><label>Rate ($/hr)</label>
+      <input type="number" name="rate" step="0.01" placeholder="Default ($85.00)" /></div>
+    <div class="field"><label>Tech</label>
+      <select name="employee_id">
+        <option value="">— None —</option>
+        {{#each employees}}
+        <option value="{{id}}">{{name}}</option>
+        {{/each}}
+      </select></div>
+  </div>
+  <label style="display:flex;align-items:center;gap:.4rem;margin:.5rem 0">
+    <input type="checkbox" name="is_warranty" /> Warranty covered
+  </label>
+  <button type="submit" class="btn btn-primary btn-sm">Add Labor</button>
+  <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-labor">Cancel</button>
+</form>
+</script>
+
+<!-- ── Labor lines partial (targeted refresh) ──────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-wo-labor-lines">
+{{#if labor_lines}}
+<table class="lines-table">
+  <thead><tr>
+    <th>Description</th><th>Hours</th><th>Rate</th><th>Total</th><th>W</th><th></th>
+  </tr></thead>
+  <tbody>
+    {{#each labor_lines}}
+    <tr>
+      <td>{{description}}</td>
+      <td>{{hours}}</td>
+      <td>{{rate_fmt}}</td>
+      <td>{{total_fmt}}</td>
+      <td class="warranty-col" title="Warranty covered">{{#if is_warranty}}✓{{/if}}</td>
+      <td>{{#if ../is_open}}<button class="btn btn-danger btn-xs" onclick="deleteLabor({{../wo_id}},{{id}})">✕</button>{{/if}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted empty">No labor logged yet.</p>
+{{/if}}
+</script>
+
+<!-- ── Parts lines partial (targeted refresh) ───────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-wo-part-lines">
+{{#if part_lines}}
+<table class="lines-table">
+  <thead><tr>
+    <th>Description</th><th>Qty</th><th>Price</th><th>Total</th><th>W</th><th></th>
+  </tr></thead>
+  <tbody>
+    {{#each part_lines}}
+    <tr>
+      <td>{{description}}</td>
+      <td>{{quantity}}</td>
+      <td>{{unit_price_fmt}}</td>
+      <td>{{total_fmt}}</td>
+      <td class="warranty-col" title="Warranty covered">{{#if is_warranty}}✓{{/if}}</td>
+      <td>{{#if ../is_open}}<button class="btn btn-danger btn-xs" onclick="deletePart({{../wo_id}},{{id}})">✕</button>{{/if}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted empty">No parts logged yet.</p>
+{{/if}}
+</script>
+
+<!-- ── Running total partial (targeted refresh) ─────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-wo-running-total">
+<div style="display:grid;grid-template-columns:1fr auto;gap:.25rem .75rem;align-items:baseline">
+  <span class="muted" style="font-size:.875rem">Labor</span>
+  <span style="text-align:right;font-size:.875rem">{{labor_total_fmt}}</span>
+  <span class="muted" style="font-size:.875rem">Parts</span>
+  <span style="text-align:right;font-size:.875rem">{{parts_total_fmt}}</span>
+  <span style="font-weight:700;padding-top:.25rem;border-top:1px solid var(--color-gray-200)">Estimated Total</span>
+  <span style="font-weight:700;text-align:right;padding-top:.25rem;border-top:1px solid var(--color-gray-200)">{{grand_total_fmt}}</span>
+  {{#if has_overage}}
+  <span style="font-size:.8rem;color:{{overage_color}};grid-column:1/-1;text-align:right;margin-top:.1rem">{{overage_fmt}}</span>
+  {{/if}}
+</div>
+</script>
+
+<!-- ── Suggested parts partial (targeted refresh) ───────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-wo-suggested-parts">
+{{#each suggested_parts}}
+<div class="suggested-part" data-part-id="{{id}}" data-price="{{price}}" data-cost="{{cost}}"
+     style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.3rem 0;border-bottom:1px solid var(--color-gray-200)">
+  <span style="font-size:.875rem">{{description}}</span>
+  <span class="muted" style="font-size:.8rem;white-space:nowrap;text-align:right">{{qty_on_hand}} on hand</span>
+  {{#if ../is_open}}<button class="btn btn-ghost btn-sm btn-add-suggested">Add</button>{{/if}}
+</div>
+{{else}}
+<p class="muted empty">No suggested parts on file.</p>
+{{/each}}
+</script>
+
+<!-- Part form -->
+<script type="text/x-handlebars-template" id="tpl-wo-part-form">
+<form id="form-part" class="inline-form" style="margin-top:.5rem">
+  <div class="form-grid-3">
+    <div class="field" style="grid-column:1/-1"><label>Description *</label>
+      <input type="text" name="description" required placeholder="Part name or number" /></div>
+    <div class="field"><label>Qty</label>
+      <input type="number" name="quantity" value="1" min="1" /></div>
+    <div class="field"><label>Unit Price *</label>
+      <input type="number" name="unit_price" step="0.01" min="0" required /></div>
+    <div class="field"><label>Unit Cost</label>
+      <input type="number" name="unit_cost" step="0.01" min="0" /></div>
+  </div>
+  <label style="display:flex;align-items:center;gap:.4rem;margin:.5rem 0">
+    <input type="checkbox" name="is_warranty" /> Warranty covered
+  </label>
+  <button type="submit" class="btn btn-primary btn-sm">Add Part</button>
+  <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-part">Cancel</button>
+</form>
+</script>
+
+<!-- Comm log form (modal body) -->
+<script type="text/x-handlebars-template" id="tpl-wo-comm-form">
+<form id="form-comm">
+  {{#if contact_href}}
+  <div style="margin-bottom:1rem;padding:.6rem .75rem;background:var(--color-gray-50);border-radius:var(--radius);font-size:.9rem">
+    <strong>{{cust_name}}</strong> prefers {{contact_pref_label}} —
+    <a href="{{contact_href}}">{{contact_display}}</a>
+  </div>
+  {{/if}}
+  <div class="form-grid-2">
+    <div class="field"><label>Method</label>
+      <select name="method">
+        {{#each methods}}
+        <option value="{{value}}"{{#if is_selected}} selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select></div>
+    <div class="field"><label>Direction</label>
+      <select name="direction">
+        <option value="outbound">Outbound (we called)</option>
+        <option value="inbound">Inbound (they called)</option>
+      </select></div>
+    <div class="field"><label>Logged by</label>
+      <select name="employee_id">
+        <option value="">— None —</option>
+        {{#each employees}}
+        <option value="{{id}}">{{name}}</option>
+        {{/each}}
+      </select></div>
+    <div class="field" style="grid-column:1/-1"><label>Summary *</label>
+      <input type="text" name="summary" required
+             placeholder="Left voicemail re: estimate, Customer approved…" /></div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-cancel-comm">Cancel</button>
+    <button type="submit" class="btn btn-primary">Log</button>
+  </div>
+</form>
+</script>
+
+<!-- Diagnosis form -->
+<script type="text/x-handlebars-template" id="tpl-wo-diagnosis-form">
+<form id="form-diagnosis">
+  <div class="field"><label>Diagnosis / findings *</label>
+    <textarea name="diagnosis" rows="3" required></textarea></div>
+  <div class="field"><label>Estimated customer cost ($)</label>
+    <input type="number" name="estimated_cost" step="0.01" min="0" value="0" /></div>
+  <button type="submit" class="btn btn-primary">Save Diagnosis</button>
+  <button type="button" class="btn btn-ghost" id="btn-cancel-diag">Cancel</button>
+</form>
+</script>
+
+<!-- Cancel / decline form -->
+<script type="text/x-handlebars-template" id="tpl-wo-cancel-form">
+<form id="form-cancel">
+  <h4>{{title}}</h4>
+  <div class="field"><label>Reason</label>
+    <select name="reason">
+      {{#each reasons}}
+      <option value="{{value}}"{{#if is_selected}} selected{{/if}}>{{label}}</option>
+      {{/each}}
+    </select></div>
+  <div class="field"><label>Details (optional)</label>
+    <input type="text" name="detail" /></div>
+  <button type="submit" class="btn btn-danger">Confirm Cancel</button>
+  <button type="button" class="btn btn-ghost" id="btn-cancel-cancel">Back</button>
+</form>
+</script>
+
+<!-- Pickup form -->
+<script type="text/x-handlebars-template" id="tpl-wo-pickup-form">
+<form id="form-pickup">
+  <h4 style="margin-bottom:.5rem">Record Pickup</h4>
+  <div class="field">
+    <label>Pickup Date</label>
+    <input type="date" name="pickup_date" value="{{today}}" required />
+  </div>
+  <button type="submit" class="btn btn-primary">Confirm Pickup</button>
+  <button type="button" class="btn btn-ghost" id="btn-cancel-pickup">Cancel</button>
+</form>
+</script>
+
+<!-- Payment form -->
+<script type="text/x-handlebars-template" id="tpl-wo-payment-form">
+<form id="form-payment">
+  <h4 style="margin-bottom:.5rem">Record Payment</h4>
+  <div class="form-grid-2">
+    <div class="field"><label>Method</label>
+      <select name="method">
+        <option value="cash">Cash</option>
+        <option value="card">Card</option>
+        <option value="check">Check</option>
+        <option value="warranty">Warranty</option>
+      </select></div>
+    <div class="field"><label>Amount ($)</label>
+      <input type="number" name="amount" step="0.01" min="0" required /></div>
+    <div class="field" style="grid-column:1/-1"><label>Reference # (optional)</label>
+      <input type="text" name="reference"
+             placeholder="Check #, card last 4, auth code…" /></div>
+  </div>
+  <button type="submit" class="btn btn-primary">Save Payment</button>
+  <button type="button" class="btn btn-ghost" id="btn-cancel-payment">Cancel</button>
+</form>
+</script>

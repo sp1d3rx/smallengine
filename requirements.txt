@@ -1,0 +1,4 @@
+py4web>=1.20240101.1
+pydal
+yatl
+PyYAML

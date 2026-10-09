@@ -1,0 +1,344 @@
+<!-- ── Retail POS — open sale ─────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-retail-pos">
+<section class="page">
+  <div class="page-header">
+    <h1>Retail Sale #{{sale_id}}</h1>
+    <button class="btn btn-danger btn-sm" id="btn-void-sale">Void Sale</button>
+  </div>
+
+  <div class="bench-layout">
+    <div class="bench-left">
+
+      <div class="bench-card">
+        <h3>Part Search</h3>
+        <div class="field">
+          <input type="search" id="pos-search" placeholder="Search by description or part number…"
+                 autocomplete="off" />
+        </div>
+        <div id="pos-results"></div>
+      </div>
+
+    </div>
+    <div class="bench-right">
+
+      <div class="bench-card">
+        <h3>Cart</h3>
+        <div id="pos-cart">
+          {{#if lines}}
+          <table class="lines-table">
+            <thead><tr>
+              <th>Description</th><th>Qty</th><th>Price</th><th>Total</th><th></th>
+            </tr></thead>
+            <tbody>
+              {{#each lines}}
+              <tr>
+                <td>{{description}}</td>
+                <td>{{quantity}}</td>
+                <td>{{unit_price_fmt}}</td>
+                <td>{{total_fmt}}</td>
+                <td><button class="btn btn-danger btn-xs btn-remove-line" data-line-id="{{id}}">✕</button></td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
+          {{else}}
+          <p class="muted empty">No items added yet.</p>
+          {{/if}}
+        </div>
+      </div>
+
+      <div class="bench-card" id="pos-totals">
+        <div style="display:grid;grid-template-columns:1fr auto;gap:.25rem .75rem;align-items:baseline">
+          <span class="muted" style="font-size:.875rem">Subtotal</span>
+          <span id="pos-subtotal" style="text-align:right;font-size:.875rem">{{subtotal_fmt}}</span>
+          <span class="muted" style="font-size:.875rem">Tax (8.25%)</span>
+          <span id="pos-tax" style="text-align:right;font-size:.875rem">{{tax_fmt}}</span>
+          <span style="font-weight:700;padding-top:.25rem;border-top:1px solid var(--color-gray-200)">Total</span>
+          <span id="pos-total" style="font-weight:700;text-align:right;padding-top:.25rem;border-top:1px solid var(--color-gray-200)">{{total_fmt}}</span>
+        </div>
+        <button class="btn btn-primary" id="btn-checkout"
+                style="margin-top:.75rem;width:100%"
+                {{#unless has_lines}}disabled{{/unless}}>
+          Checkout
+        </button>
+      </div>
+
+    </div>
+  </div>
+</section>
+</script>
+
+<!-- ── Cart partial (targeted refresh) ──────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-retail-cart">
+{{#if lines}}
+<table class="lines-table">
+  <thead><tr>
+    <th>Description</th><th>Qty</th><th>Price</th><th>Total</th><th></th>
+  </tr></thead>
+  <tbody>
+    {{#each lines}}
+    <tr>
+      <td>{{description}}</td>
+      <td>{{quantity}}</td>
+      <td>{{unit_price_fmt}}</td>
+      <td>{{total_fmt}}</td>
+      <td><button class="btn btn-danger btn-xs btn-remove-line" data-line-id="{{id}}">✕</button></td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted empty">No items added yet.</p>
+{{/if}}
+</script>
+
+<!-- ── Part search results ────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-retail-part-results">
+{{#each parts}}
+<div class="pos-result" data-part-id="{{id}}"
+     style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;
+            padding:.4rem .25rem;border-bottom:1px solid var(--color-gray-100);cursor:default">
+  <span>{{description}}{{#if part_number}} <span class="muted" style="font-size:.8rem">({{part_number}})</span>{{/if}}</span>
+  <span class="muted" style="font-size:.8rem;white-space:nowrap">{{qty_on_hand}} on hand</span>
+  <span style="font-weight:600;white-space:nowrap">{{price_fmt}}
+    {{#if in_stock}}
+    <button class="btn btn-primary btn-sm btn-pos-add" data-part-id="{{id}}"
+            style="margin-left:.4rem">Add</button>
+    {{else}}
+    <span class="muted" style="font-size:.8rem;margin-left:.4rem">Out of stock</span>
+    {{/if}}
+  </span>
+</div>
+{{else}}
+<p class="muted" style="padding:.5rem 0;font-size:.875rem">No parts found.</p>
+{{/each}}
+</script>
+
+<!-- ── Checkout modal ────────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-retail-checkout">
+<form id="form-checkout">
+  <h4 style="margin-bottom:.75rem">Total: <strong>{{total_fmt}}</strong></h4>
+
+  <div class="field" style="margin-bottom:.5rem">
+    <label style="font-weight:600">Customer</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.25rem">
+      <label style="font-weight:normal;display:flex;align-items:center;gap:.4rem">
+        <input type="radio" name="cust_type" id="cust-type-walkin" value="walkin" checked /> Walk-in / Cash
+      </label>
+      <label style="font-weight:normal;display:flex;align-items:center;gap:.4rem">
+        <input type="radio" name="cust_type" id="cust-type-known" value="known" /> Existing Customer
+      </label>
+    </div>
+  </div>
+
+  <div id="walkin-fields">
+    <div class="field">
+      <label>Name (optional)</label>
+      <input type="text" id="checkout-cash-customer-name" name="cash_customer_name" placeholder="Walk-in customer name" />
+    </div>
+  </div>
+
+  <div id="known-fields" class="hidden">
+    <div class="field">
+      <label>Customer Search</label>
+      <input type="search" id="checkout-cust-search" placeholder="Search by name or phone…" autocomplete="off" />
+      <div id="checkout-cust-results" class="search-dropdown hidden"></div>
+    </div>
+    <div id="checkout-cust-selected" class="hidden"></div>
+    <input type="hidden" id="checkout-customer-id" name="customer_id" />
+  </div>
+
+  <div class="form-grid-2" style="margin-top:.75rem">
+    <div class="field"><label>Payment Method *</label>
+      <select name="payment_method" id="checkout-payment-method">
+        <option value="cash">Cash</option>
+        <option value="card">Card</option>
+        <option value="check">Check</option>
+      </select></div>
+    <div class="field"><label>Reference # (optional)</label>
+      <input type="text" id="checkout-payment-reference" name="payment_reference" placeholder="Check #, card last 4…" /></div>
+  </div>
+
+  <div id="cash-tender-fields" style="margin-top:.5rem">
+    <div class="form-grid-2">
+      <div class="field">
+        <label>Amount Given</label>
+        <input type="number" id="cash-tendered" name="cash_tendered" min="0" step="0.01"
+               placeholder="0.00" style="font-size:1.1rem" />
+      </div>
+      <div class="field">
+        <label>Change</label>
+        <div id="cash-change">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-cancel-checkout">Cancel</button>
+    <button type="submit" class="btn btn-primary">Complete Sale</button>
+  </div>
+</form>
+</script>
+
+<!-- ── Receipt (paid sale) ────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-retail-receipt">
+<div class="no-print" style="padding:1rem;display:flex;gap:.75rem;align-items:center">
+  <a href="#/retail/new" class="btn btn-primary">+ New Sale</a>
+  <button class="btn btn-ghost" onclick="window.print()">Print Receipt</button>
+  {{#if can_void}}
+  <button class="btn btn-secondary btn-sm" id="btn-return-items" style="margin-left:auto">Return Items</button>
+  <button class="btn btn-danger btn-sm" id="btn-void-sale">Void Entire Sale</button>
+  {{/if}}
+</div>
+
+<div class="invoice-sheet">
+  <div class="invoice-header">
+    <div>
+      <h1 class="invoice-shop-name">{{shop_name}}</h1>
+      <p class="invoice-shop-addr">{{shop_addr_line}}</p>
+      {{#if shop_phone}}<p class="invoice-shop-addr">{{shop_phone}}</p>{{/if}}
+    </div>
+    <div class="invoice-meta">
+      <h2>Receipt #{{sale_id}}</h2>
+      <table class="invoice-meta-table">
+        <tr><th>Date</th><td>{{sale_date}}</td></tr>
+        <tr><th>Payment</th><td>{{payment_method_label}}{{#if payment_reference}} — {{payment_reference}}{{/if}}</td></tr>
+        {{#if customer_name}}<tr><th>Customer</th><td>{{customer_name}}</td></tr>{{/if}}
+      </table>
+    </div>
+  </div>
+
+  <div class="invoice-section">
+    <table class="invoice-table">
+      <thead><tr>
+        <th>Item</th><th class="num">Qty</th>
+        <th class="num">Unit Price</th><th class="num">Amount</th>
+      </tr></thead>
+      <tbody>
+        {{#each lines}}
+        <tr>
+          <td>{{description}}</td>
+          <td class="num">{{quantity}}</td>
+          <td class="num">{{unit_price_fmt}}</td>
+          <td class="num">{{total_fmt}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="invoice-totals">
+    <table>
+      <tr><th>Subtotal</th><td>{{subtotal_fmt}}</td></tr>
+      <tr><th>Tax (8.25%)</th><td>{{tax_fmt}}</td></tr>
+      <tr class="total-row"><th>Total</th><td>{{total_fmt}}</td></tr>
+    </table>
+  </div>
+
+  <p class="invoice-footer">Thank you for your business!</p>
+</div>
+</script>
+
+<!-- ── Sales list ─────────────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-sales-list">
+<section class="page">
+  <div class="page-header">
+    <h1>Sales</h1>
+    <a href="#/retail/new" class="btn btn-primary">+ New Sale</a>
+  </div>
+
+  <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+    <input type="search" id="sale-id-search" placeholder="Jump to sale #…"
+           style="width:10rem" autocomplete="off" />
+    <span class="muted" style="font-size:.875rem">or show last:</span>
+    <button class="btn btn-sm {{#if (eq days '2')}}btn-primary{{else}}btn-ghost{{/if}}"
+            data-days="2">2 days</button>
+    <button class="btn btn-sm {{#if (eq days '7')}}btn-primary{{else}}btn-ghost{{/if}}"
+            data-days="7">7 days</button>
+    <button class="btn btn-sm {{#if (eq days '30')}}btn-primary{{else}}btn-ghost{{/if}}"
+            data-days="30">30 days</button>
+    <button class="btn btn-sm {{#if (eq days 'all')}}btn-primary{{else}}btn-ghost{{/if}}"
+            data-days="all">All</button>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>#</th><th>Date</th><th>Type</th><th>Customer</th>
+      <th class="num">Total</th><th>Payment</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>
+      {{#each sales}}
+      <tr>
+        <td>#{{id}}</td>
+        <td>{{sale_date}}</td>
+        <td>{{type_label}}</td>
+        <td>{{customer_name}}</td>
+        <td class="num">{{total_fmt}}</td>
+        <td>{{payment_label}}</td>
+        <td><span class="badge badge-{{status}}">{{status}}</span></td>
+        <td>
+          {{#if is_retail}}
+          <a href="#/retail/{{id}}" class="btn btn-ghost btn-sm">View</a>
+          {{#if is_paid}}
+          <a href="#/retail/{{id}}" class="btn btn-secondary btn-sm" style="margin-left:.25rem">Return</a>
+          {{/if}}
+          {{/if}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="8" class="empty">No sales found.</td></tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
+</script>
+
+<!-- ── Return modal ───────────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-retail-return">
+<form id="form-return">
+  <p class="muted" style="margin-bottom:.75rem;font-size:.875rem">
+    Enter the quantity to return for each item. Leave at 0 to skip.
+  </p>
+  <table class="lines-table">
+    <thead><tr>
+      <th>Item</th><th class="num">Purchased</th><th class="num" style="width:7rem">Return Qty</th>
+    </tr></thead>
+    <tbody>
+      {{#each lines}}
+      <tr>
+        <td>{{description}}</td>
+        <td class="num">{{quantity}}</td>
+        <td class="num">
+          <input type="number" class="return-qty-input" data-line-id="{{id}}"
+                 min="0" max="{{quantity}}" value="{{quantity}}"
+                 style="width:5rem;text-align:right" />
+        </td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-ghost" id="btn-cancel-return">Cancel</button>
+    <button type="submit" class="btn btn-primary">Process Return</button>
+  </div>
+</form>
+</script>
+
+<!-- ── Customer search results (checkout modal) ──────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-retail-cust-results">
+{{#each customers}}
+<div class="dropdown-item" data-cust-id="{{id}}" data-cust-name="{{name}}"
+     style="padding:.4rem .5rem;cursor:pointer">{{display}}</div>
+{{else}}
+<div class="dropdown-item muted" style="padding:.4rem .5rem">No customers found.</div>
+{{/each}}
+</script>
+
+<!-- ── Voided notice ──────────────────────────────────────────────────────────── -->
+<script type="text/x-handlebars-template" id="tpl-retail-voided">
+<section class="page">
+  <h1>Sale #{{sale_id}} — Voided</h1>
+  <p class="muted">This sale has been voided. Any paid stock has been restocked.</p>
+  <a href="#/retail/new" class="btn btn-primary" style="margin-top:1rem">+ New Sale</a>
+</section>
+</script>
